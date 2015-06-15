@@ -79,9 +79,8 @@ class Screen_Marker_Calibration(Calibration_Plugin):
     Points are collected at sites - not between
 
     """
-    def __init__(self, g_pool,menu_conf = {'collapsed':True},fullscreen=True,marker_scale=1.0,sample_duration=40, calGlint=False):
+    def __init__(self, g_pool,menu_conf = {'collapsed':True},fullscreen=True,marker_scale=1.0,sample_duration=40):
         super(Screen_Marker_Calibration, self).__init__(g_pool)
-        self.calGlint = calGlint
         self.active = False
         self.detected = False
         self.screen_marker_state = 0.
@@ -144,7 +143,6 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         submenu.append(ui.Switch('show_edges',self,label='show edges'))
         submenu.append(ui.Slider('area_threshold',self,step=1,min=5,max=50,label='Area threshold'))
         submenu.append(ui.Slider('dist_threshold',self,step=.5,min=1,max=20,label='Eccetricity threshold'))
-        submenu.append(ui.Switch('calGlint', self,on_val=True,off_val=False,label='Calibrate with glint'))
 
         self.button = ui.Thumb('active',self,setter=self.toggle,label='Calibrate',hotkey='c')
         self.button.on_color[:] = (.3,.2,1.,.9)
@@ -178,6 +176,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
                         (1., 0.),(.5, 0.),(0.,0.),
                         (.75,.5)]
 
+        self.calGlint = self.g_pool.calGlint
         self.active_site = 0
         self.active = True
         self.ref_list = []
@@ -247,7 +246,6 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         self.button.status_text = ''
 
         ref_list = list(self.ref_list)
-
         cal_pt_cloud_glint = calibrate.preprocess_data_glint(self.glint_pupil_list, ref_list)
         cal_pt_cloud = calibrate.preprocess_data(self.pupil_list,self.ref_list)
 
@@ -426,7 +424,6 @@ class Screen_Marker_Calibration(Calibration_Plugin):
     def get_init_dict(self):
         d = {}
         d['fullscreen'] = self.fullscreen
-        d['calGlint'] = self.calGlint
         d['marker_scale'] = self.marker_scale
         if self.menu:
             d['menu_conf'] = self.menu.configuration

@@ -157,6 +157,8 @@ def world(g_pool,cap_src,cap_size):
     g_pool.pupil_confidence_threshold = session_settings.get('pupil_confidence_threshold',.6)
     g_pool.active_calibration_plugin = None
 
+    g_pool.calGlint = session_settings.get('calibrate_glint', False)
+
 
     #UI callback functions
     def reset_timebase():
@@ -240,6 +242,8 @@ def world(g_pool,cap_src,cap_size):
     g_pool.calibration_menu.append(ui.Selector('active_calibration_plugin',g_pool, selection = calibration_plugins,
                                         labels = [p.__name__.replace('_',' ') for p in calibration_plugins],
                                         setter= set_calibration_plugin,label='Method'))
+
+    g_pool.calibration_menu.append(ui.Switch('calGlint', g_pool,on_val=True,off_val=False,label='Calibrate with glint'))
     g_pool.sidebar.append(g_pool.calibration_menu)
     g_pool.gui.append(g_pool.sidebar)
 
@@ -365,6 +369,7 @@ def world(g_pool,cap_src,cap_size):
 
     session_settings['loaded_plugins'] = g_pool.plugins.get_initializers()
     session_settings['pupil_confidence_threshold'] = g_pool.pupil_confidence_threshold
+    session_settings['calibrate_glint'] = g_pool.calGlint
     session_settings['gui_scale'] = g_pool.gui.scale
     session_settings['side_bar_config'] = g_pool.sidebar.configuration
     session_settings['capture_menu_config'] = g_pool.capture.menu.configuration

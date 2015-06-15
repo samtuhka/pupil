@@ -18,6 +18,8 @@ recordings/
 capture_settings/
 player_settings/
 settings/
+pupil_src/.idea
+.idea
 *.db
 *.npy
 *.png

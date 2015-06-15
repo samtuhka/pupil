@@ -21,6 +21,7 @@ import audio
 from pyglui import ui
 from plugin import Calibration_Plugin
 from gaze_mappers import Simple_Gaze_Mapper
+from gaze_mappers import Glint_Gaze_Mapper
 #logging
 import logging
 logger = logging.getLogger(__name__)
@@ -104,6 +105,8 @@ class Manual_Marker_Calibration(Calibration_Plugin):
         self.active = True
         self.ref_list = []
         self.pupil_list = []
+        self.glint_pupil_list =[]
+        self.calGlint = self.g_pool.calGlint
 
 
     def stop(self):
@@ -114,7 +117,8 @@ class Manual_Marker_Calibration(Calibration_Plugin):
         self.active = False
         self.button.status_text = ''
         print 'button:', self.button.status_text
-
+        ref_list = list(self.ref_list)
+        cal_pt_cloud_glint = calibrate.preprocess_data_glint(self.glint_pupil_list, ref_list)
         cal_pt_cloud = calibrate.preprocess_data(self.pupil_list,self.ref_list)
         logger.info("Collected %s data points." %len(cal_pt_cloud))
         if len(cal_pt_cloud) < 20:
@@ -124,7 +128,16 @@ class Manual_Marker_Calibration(Calibration_Plugin):
         map_fn,params = calibrate.get_map_from_cloud(cal_pt_cloud,self.world_size,return_params=True)
         np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud.npy'),cal_pt_cloud)
 
+
+        cal_pt_cloud_glint = np.array(cal_pt_cloud_glint)
+        map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint,self.world_size,return_params=True)
+        np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud_glint.npy'),cal_pt_cloud_glint)
+
         self.g_pool.plugins.add(Simple_Gaze_Mapper(self.g_pool,params))
+
+        if self.calGlint:
+            prms = params, params2
+            self.g_pool.plugins.add(Glint_Gaze_Mapper(self.g_pool, params2))
 
 
     def update(self,frame,events):
@@ -135,7 +148,7 @@ class Manual_Marker_Calibration(Calibration_Plugin):
         """
         if self.active:
             recent_pupil_positions = events['pupil_positions']
-
+            recent_glint_pupil_positions = events['glint_pupil_vectors']
             gray_img  = frame.gray
 
             if self.world_size is None:
@@ -227,6 +240,9 @@ class Manual_Marker_Calibration(Calibration_Plugin):
             for p_pt in recent_pupil_positions:
                 if p_pt['confidence'] > self.g_pool.pupil_confidence_threshold:
                     self.pupil_list.append(p_pt)
+
+            for g_p_pt in recent_glint_pupil_positions:
+                self.glint_pupil_list.append(g_p_pt)
 
             if self.counter:
                 if self.detected:

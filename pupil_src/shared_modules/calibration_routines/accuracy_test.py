@@ -140,7 +140,9 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
         self.active = True
         self.ref_list = []
         self.pupil_list = [] #we dont use it only here becasue we use update fn from parent
+        self.glint_pupil_list =[]
         self.gaze_list = []
+        self.calGlint = self.g_pool.calGlint
         self.open_window("Accuracy_Test")
 
     def update(self,frame,events):
