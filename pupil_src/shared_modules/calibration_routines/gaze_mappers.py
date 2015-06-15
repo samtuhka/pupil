@@ -22,7 +22,7 @@ class Dummy_Gaze_Mapper(Gaze_Mapping_Plugin):
             if p['confidence'] > self.g_pool.pupil_confidence_threshold:
                 gaze_pts.append({'norm_pos':p['norm_pos'][:],'confidence':p['confidence'],'timestamp':p['timestamp']})
 
-        events['gaze_positions'] = gaze_pts
+        events['gaze'] = gaze_pts
 
     def get_init_dict(self):
         return {}
@@ -34,16 +34,15 @@ class Simple_Gaze_Mapper(Gaze_Mapping_Plugin):
         super(Simple_Gaze_Mapper, self).__init__(g_pool)
         self.params = params
         self.map_fn = make_map_function(*self.params)
-
+    
     def update(self,frame,events):
         gaze_pts = []
-
         for p in events['pupil_positions']:
             if p['confidence'] > self.g_pool.pupil_confidence_threshold:
                 gaze_point = self.map_fn(p['norm_pos'])
                 gaze_pts.append({'norm_pos':gaze_point,'confidence':p['confidence'],'timestamp':p['timestamp']})
 
-        events['gaze_positions'] = gaze_pts
+        events['gaze'] = gaze_pts
 
     def get_init_dict(self):
         return {'params':self.params}
@@ -57,7 +56,7 @@ class Volumetric_Gaze_Mapper(Gaze_Mapping_Plugin):
     def update(self,frame,events):
         gaze_pts = []
         raise NotImplementedError
-        events['gaze_positions'] = gaze_pts
+        events['gaze'] = gaze_pts
 
     def get_init_dict(self):
         return {'params':self.params}
@@ -70,7 +69,39 @@ class Bilateral_Gaze_Mapper(Gaze_Mapping_Plugin):
     def update(self,frame,events):
         gaze_pts = []
         raise NotImplementedError
-        events['gaze_positions'] = gaze_pts
+        events['gaze'] = gaze_pts
+
+    def get_init_dict(self):
+        return {'params':self.params}
+
+
+class Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
+    """docstring for Simple_Gaze_Mapper"""
+    def __init__(self, g_pool, params):
+        super(Glint_Gaze_Mapper, self).__init__(g_pool)
+        self.params = params
+        self.map_fn = make_map_function(*params)
+
+
+
+    def update(self,frame,events):
+        """
+        gaze_pts = []
+        for p in events['pupil_positions']:
+            if p['confidence'] > self.g_pool.pupil_confidence_threshold:
+                gaze_point = self.map_fn(p['norm_pos'])
+                gaze_pts.append({'norm_pos':gaze_point,'confidence':p['confidence'],'timestamp':p['timestamp']})
+
+        events['gaze'] = gaze_pts
+        """
+
+        gaze_pts = []
+        for g in events['glint_pupil_vectors']:
+            if g['pupil_confidence'] > self.g_pool.pupil_confidence_threshold:
+                v = g['x'], g['y']
+                gaze_glint_point = self.map_fn(v)
+                gaze_pts.append({'norm_pos':gaze_glint_point,'confidence':g['pupil_confidence'],'timestamp':g['timestamp']})
+        events['gaze'] = gaze_pts
 
     def get_init_dict(self):
         return {'params':self.params}

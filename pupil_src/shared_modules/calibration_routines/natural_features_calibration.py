@@ -30,7 +30,7 @@ class Natural_Features_Calibration(Calibration_Plugin):
     """Calibrate using natural features in a scene.
         Features are selected by a user by clicking on
     """
-    def __init__(self, g_pool):
+    def __init__(self, g_pool,menu_conf = {'collapsed':True} ):
         super(Natural_Features_Calibration, self).__init__(g_pool)
         self.first_img = None
         self.point = None
@@ -44,14 +44,21 @@ class Natural_Features_Calibration(Calibration_Plugin):
 
 
         self.menu = None
+        self.menu_conf = menu_conf
         self.button = None
 
         self.order = .5
 
 
     def init_gui(self):
+
         self.info = ui.Info_Text("Calibrate gaze parameters using features in your environment. Ask the subject to look at objects in the scene and click on them in the world window.")
         self.g_pool.calibration_menu.append(self.info)
+
+        self.menu = ui.Growing_Menu('Controls')
+        self.menu.configuration = self.menu_conf
+        self.g_pool.calibration_menu.append(self.menu)
+
         self.button = ui.Thumb('active',self,setter=self.toggle,label='Calibrate',hotkey='c')
         self.button.on_color[:] = (.3,.2,1.,.9)
         self.g_pool.quickbar.insert(0,self.button)
@@ -59,6 +66,7 @@ class Natural_Features_Calibration(Calibration_Plugin):
 
     def deinit_gui(self):
         if self.menu:
+            self.menu_conf = self.menu.configuration
             self.g_pool.calibration_menu.remove(self.menu)
             self.g_pool.calibration_menu.remove(self.info)
             self.menu = None
@@ -157,7 +165,10 @@ class Natural_Features_Calibration(Calibration_Plugin):
             self.count = 30
 
     def get_init_dict(self):
-        return {}
+        if self.menu:
+            return {'menu_conf':self.menu.configuration}
+        else:
+            return {'menu_conf':self.menu_conf}
 
 
     def cleanup(self):

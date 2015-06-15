@@ -117,10 +117,14 @@ def correlate_eye_world(eye_timestamps,world_timestamps):
 class Eye_Video_Overlay(Plugin):
     """docstring
     """
-    def __init__(self,g_pool,alpha=0.6,mirror=True):
+    def __init__(self,g_pool,alpha=0.6,mirror=True,menu_conf={'collapsed':False}):
         super(Eye_Video_Overlay, self).__init__(g_pool)
         self.order = .6
+
+        # initialize empty menu
+        # and load menu configuration of last session
         self.menu = None
+        self.menu_conf = menu_conf
 
         # user controls
         self.alpha = alpha
@@ -159,6 +163,7 @@ class Eye_Video_Overlay(Plugin):
     def init_gui(self):
         # initialize the menu
         self.menu = ui.Scrolling_Menu('Eye Video Overlay')
+        self.menu.configuration = self.menu_conf
         self.menu.append(ui.Info_Text('Show the eye video overlaid on top of the world video.'))
         self.menu.append(ui.Slider('alpha',self,min=0.0,step=0.05,max=1.0,label='Opacity'))
         self.menu.append(ui.Switch('mirror',self,label="Mirror image"))
@@ -169,6 +174,7 @@ class Eye_Video_Overlay(Plugin):
 
     def deinit_gui(self):
         if self.menu:
+            self.menu_conf = self.menu.configuration
             self.g_pool.gui.remove(self.menu)
             self.menu = None
 
@@ -203,7 +209,10 @@ class Eye_Video_Overlay(Plugin):
 
 
     def get_init_dict(self):
-        return {'alpha':self.alpha,'mirror':self.mirror}
+        if self.menu:
+            return {'alpha':self.alpha,'mirror':self.mirror,'menu_conf':self.menu.configuration}
+        else:
+            return {'alpha':self.alpha,'mirror':self.mirror,'menu_conf':self.menu_conf}
 
     def cleanup(self):
         """ called when the plugin gets terminated.

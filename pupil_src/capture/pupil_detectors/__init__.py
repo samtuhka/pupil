@@ -23,4 +23,4 @@ import logging
 logger = logging.getLogger(__name__)
 
 from canny_detector import Canny_Detector
-
+from glint_detector import Glint_Detector

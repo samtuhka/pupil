@@ -33,14 +33,16 @@ from plugin import Plugin_List
 from vis_circle import Vis_Circle
 from vis_cross import Vis_Cross
 from vis_polyline import Vis_Polyline
+from display_gaze import Display_Gaze
 from vis_light_points import Vis_Light_Points
 from vis_watermark import Vis_Watermark
 
 from scan_path import Scan_Path
+from filter_fixations import Filter_Fixations
 from manual_gaze_correction import Manual_Gaze_Correction
 from eye_video_overlay import Eye_Video_Overlay
 
-available_plugins =  Vis_Circle,Vis_Cross, Vis_Polyline, Vis_Light_Points, Vis_Watermark, Scan_Path,Manual_Gaze_Correction,Eye_Video_Overlay
+available_plugins =  Vis_Circle,Vis_Cross, Vis_Polyline, Vis_Light_Points, Vis_Watermark, Scan_Path,Filter_Fixations,Manual_Gaze_Correction,Eye_Video_Overlay
 name_by_index = [p.__name__ for p in available_plugins]
 index_by_name = dict(zip(name_by_index,range(len(name_by_index))))
 plugin_by_name = dict(zip(name_by_index,available_plugins))
@@ -74,9 +76,9 @@ def export(should_terminate,frames_to_export,current_frame, rec_dir,user_dir,sta
 
     #correlate data
     if rec_version < VersionFormat('0.4'):
-        gaze_positions_by_frame = correlate_gaze_legacy(gaze_list,timestamps)
+        positions_by_frame = correlate_gaze_legacy(gaze_list,timestamps)
     else:
-        gaze_positions_by_frame = correlate_gaze(gaze_list,timestamps)
+        positions_by_frame = correlate_gaze(gaze_list,timestamps)
 
     cap = autoCreateCapture(video_path,timestamps=timestamps_path)
     width,height = cap.frame_size
@@ -128,7 +130,7 @@ def export(should_terminate,frames_to_export,current_frame, rec_dir,user_dir,sta
     g.rec_version = rec_version
     g.timestamps = timestamps
     g.gaze_list = gaze_list
-    g.gaze_positions_by_frame = gaze_positions_by_frame
+    g.positions_by_frame = positions_by_frame
     g.plugins = Plugin_List(g,plugin_by_name,plugin_initializers)
 
     while frames_to_export.value - current_frame.value > 0:
@@ -148,7 +150,7 @@ def export(should_terminate,frames_to_export,current_frame, rec_dir,user_dir,sta
 
         events = {}
         #new positons and events
-        events['gaze_positions'] = gaze_positions_by_frame[frame.index]
+        events['pupil_positions'] = positions_by_frame[frame.index]
         # allow each Plugin to do its work.
         for p in g.plugins:
             p.update(frame,events)

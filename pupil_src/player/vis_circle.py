@@ -21,13 +21,15 @@ from methods import denormalize
 
 class Vis_Circle(Plugin):
     """docstring for DisplayGaze"""
-    def __init__(self, g_pool,radius=20,color=(0.0,0.7,0.25,0.2),thickness=2,fill=True):
+    def __init__(self, g_pool,radius=20,color=(0.0,0.7,0.25,0.2),thickness=2,fill=True,menu_conf={'pos':(300,300),'size':(300,300),'collapsed':False}):
         super(Vis_Circle, self).__init__(g_pool)
         self.order = .9
         self.uniqueness = "not_unique"
 
         # initialize empty menu
+        # and load menu configuration of last session
         self.menu = None
+        self.menu_conf = menu_conf
 
         self.r = color[0]
         self.g = color[1]
@@ -43,13 +45,15 @@ class Vis_Circle(Plugin):
         else:
             thickness = self.thickness
 
-        pts = [denormalize(pt['norm_pos'],frame.img.shape[:-1][::-1],flip_y=True) for pt in events.get('gaze_positions',[])]
+        pts = [denormalize(pt['norm_gaze'],frame.img.shape[:-1][::-1],flip_y=True) for pt in events['pupil_positions'] if pt['norm_gaze'] is not None]
         for pt in pts:
             transparent_circle(frame.img, pt, radius=self.radius, color=(self.b, self.g, self.r, self.a), thickness=thickness)
 
     def init_gui(self):
         # initialize the menu
         self.menu = ui.Scrolling_Menu('Gaze Circle')
+        # load the configuration of last session
+        self.menu.configuration = self.menu_conf
         # add menu to the window
         self.g_pool.gui.append(self.menu)
         self.menu.append(ui.Slider('radius',self,min=1,step=1,max=100,label='Radius'))
@@ -79,7 +83,7 @@ class Vis_Circle(Plugin):
         pass
 
     def get_init_dict(self):
-        return {'radius':self.radius,'color':(self.r, self.g, self.b, self.a),'thickness':self.thickness,'fill':self.fill}
+        return {'radius':self.radius,'color':(self.r, self.g, self.b, self.a),'thickness':self.thickness,'fill':self.fill, 'menu_conf':self.menu.configuration}
 
     def cleanup(self):
         """ called when the plugin gets terminated.

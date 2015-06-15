@@ -28,7 +28,7 @@ from math import sqrt
 class Marker_Detector(Plugin):
     """docstring
     """
-    def __init__(self,g_pool,mode="Show markers and frames"):
+    def __init__(self,g_pool,menu_conf={},mode="Show markers and frames"):
         super(Marker_Detector, self).__init__(g_pool)
         self.order = .2
 
@@ -69,6 +69,7 @@ class Marker_Detector(Plugin):
         self.img_shape = None
 
         self.menu= None
+        self.menu_conf=  menu_conf
         self.button=  None
         self.add_button = None
 
@@ -110,6 +111,7 @@ class Marker_Detector(Plugin):
 
     def init_gui(self):
         self.menu = ui.Growing_Menu('Marker Detector')
+        self.menu.configuration = self.menu_conf
         self.g_pool.sidebar.append(self.menu)
 
         self.button = ui.Thumb('running',self,label='Track',hotkey='t')
@@ -122,6 +124,7 @@ class Marker_Detector(Plugin):
     def deinit_gui(self):
         if self.menu:
             self.g_pool.sidebar.remove(self.menu)
+            self.menu_conf= self.menu.configuration
             self.menu= None
         if self.button:
             self.g_pool.quickbar.remove(self.button)
@@ -138,7 +141,7 @@ class Marker_Detector(Plugin):
         self.menu.append(ui.Switch('locate_3d',self,label='3D localization'))
         self.menu.append(ui.Selector('mode',self,label="Mode",selection=['Show markers and frames','Show marker IDs', 'Surface edit mode'] ))
         self.menu.append(ui.Button("Add surface", lambda:self.add_surface('_'),))
-
+        
         # disable locate_3d if camera intrinsics don't exist
         if self.camera_intrinsics is None:
             self.menu.elements[3].read_only = True
@@ -211,14 +214,20 @@ class Marker_Detector(Plugin):
         for s in self.surfaces:
             if s.detected:
                 s.gaze_on_srf = []
-                for p in events.get('gaze_positions',[]):
+                for p in events.get('gaze',[]):
                     gp_on_s = tuple(s.img_to_ref_surface(np.array(p['norm_pos'])))
                     p['realtime gaze on ' + s.name] = gp_on_s
                     s.gaze_on_srf.append(gp_on_s)
 
 
     def get_init_dict(self):
-        return {'mode':self.mode}
+        if self.menu:
+            d = {'menu_conf':self.menu.configuration,'mode':self.mode}
+        else:
+            d = {'menu_conf':self.menu_conf,'mode':self.mode}
+
+        return d
+
 
 
     def gl_display(self):

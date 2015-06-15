@@ -26,6 +26,7 @@ from pyglui.pyfontstash import fontstash
 from pyglui.ui import get_opensans_font_path
 from plugin import Calibration_Plugin
 from gaze_mappers import Simple_Gaze_Mapper
+from gaze_mappers import Glint_Gaze_Mapper
 
 #logging
 import logging
@@ -78,15 +79,15 @@ class Screen_Marker_Calibration(Calibration_Plugin):
     Points are collected at sites - not between
 
     """
-    def __init__(self, g_pool,fullscreen=True,marker_scale=1.0,sample_duration=40):
+    def __init__(self, g_pool,menu_conf = {'collapsed':True},fullscreen=True,marker_scale=1.0,sample_duration=40, calGlint=False):
         super(Screen_Marker_Calibration, self).__init__(g_pool)
+        self.calGlint = calGlint
         self.active = False
         self.detected = False
         self.screen_marker_state = 0.
         self.sample_duration =  sample_duration # number of frames to sample per site
         self.lead_in = 25 #frames of marker shown before starting to sample
         self.lead_out = 5 #frames of markers shown after sampling is donw
-
 
         self.active_site = 0
         self.sites = []
@@ -106,6 +107,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         self._window = None
 
         self.menu = None
+        self.menu_conf = menu_conf
         self.button = None
 
         self.fullscreen = fullscreen
@@ -130,26 +132,27 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         self.g_pool.calibration_menu.append(self.info)
 
         self.menu = ui.Growing_Menu('Controls')
+        self.menu.configuration = self.menu_conf
         self.g_pool.calibration_menu.append(self.menu)
         self.menu.append(ui.Selector('monitor_idx',self,selection = range(len(self.monitor_names)),labels=self.monitor_names,label='Monitor'))
         self.menu.append(ui.Switch('fullscreen',self,label='Use fullscreen'))
         self.menu.append(ui.Slider('marker_scale',self,step=0.1,min=0.5,max=2.0,label='Pattern scale'))
-
         submenu = ui.Growing_Menu('Advanced')
+        submenu.collapsed = True
         self.menu.append(submenu)
         submenu.append(ui.Slider('sample_duration',self,step=1,min=10,max=100,label='Sample duration'))
         submenu.append(ui.Switch('show_edges',self,label='show edges'))
         submenu.append(ui.Slider('area_threshold',self,step=1,min=5,max=50,label='Area threshold'))
         submenu.append(ui.Slider('dist_threshold',self,step=.5,min=1,max=20,label='Eccetricity threshold'))
-
+        submenu.append(ui.Switch('calGlint', self,on_val=True,off_val=False,label='Calibrate with glint'))
 
         self.button = ui.Thumb('active',self,setter=self.toggle,label='Calibrate',hotkey='c')
         self.button.on_color[:] = (.3,.2,1.,.9)
         self.g_pool.quickbar.insert(0,self.button)
 
-
     def deinit_gui(self):
         if self.menu:
+            self.menu_conf = self.menu.configuration
             self.g_pool.calibration_menu.remove(self.menu)
             self.g_pool.calibration_menu.remove(self.info)
             self.menu = None
@@ -179,6 +182,8 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         self.active = True
         self.ref_list = []
         self.pupil_list = []
+        self.glint_pupil_list =[]
+        #self.glint_list = []
         self.clicks_to_close = 5
         self.open_window("Calibration")
 
@@ -241,6 +246,9 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         self.close_window()
         self.button.status_text = ''
 
+        ref_list = list(self.ref_list)
+
+        cal_pt_cloud_glint = calibrate.preprocess_data_glint(self.glint_pupil_list, ref_list)
         cal_pt_cloud = calibrate.preprocess_data(self.pupil_list,self.ref_list)
 
         logger.info("Collected %s data points." %len(cal_pt_cloud))
@@ -257,6 +265,15 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         self.g_pool.plugins.add(Simple_Gaze_Mapper(self.g_pool,params))
 
 
+        cal_pt_cloud_glint = np.array(cal_pt_cloud_glint)
+        map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint,self.world_size,return_params=True)
+        np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud_glint.npy'),cal_pt_cloud_glint)
+
+        if self.calGlint:
+            prms = params, params2
+            self.g_pool.plugins.add(Glint_Gaze_Mapper(self.g_pool, params2))
+
+
     def close_window(self):
         if self._window:
             # enable mouse display
@@ -268,6 +285,8 @@ class Screen_Marker_Calibration(Calibration_Plugin):
     def update(self,frame,events):
         if self.active:
             recent_pupil_positions = events['pupil_positions']
+            #recent_glint_positions = events['glint_positions']
+            recent_glint_pupil_positions = events['glint_pupil_vectors']
             gray_img = frame.gray
 
             if self.clicks_to_close <=0:
@@ -304,6 +323,10 @@ class Screen_Marker_Calibration(Calibration_Plugin):
             for p_pt in recent_pupil_positions:
                 if p_pt['confidence'] > self.g_pool.pupil_confidence_threshold:
                     self.pupil_list.append(p_pt)
+            #for g_pt in recent_glint_positions:
+                #self.glint_list.append(g_pt[0])
+            for g_p_pt in recent_glint_pupil_positions:
+                self.glint_pupil_list.append(g_p_pt)
 
             # Animate the screen marker
             if self.screen_marker_state < self.sample_duration+self.lead_in+self.lead_out:
@@ -403,7 +426,12 @@ class Screen_Marker_Calibration(Calibration_Plugin):
     def get_init_dict(self):
         d = {}
         d['fullscreen'] = self.fullscreen
+        d['calGlint'] = self.calGlint
         d['marker_scale'] = self.marker_scale
+        if self.menu:
+            d['menu_conf'] = self.menu.configuration
+        else:
+            d['menu_conf'] = self.menu_conf
         return d
 
     def cleanup(self):

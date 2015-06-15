@@ -31,14 +31,13 @@ from gl_utils import basic_gl_setup,adjust_gl_view, clear_gl_screen,make_coord_s
 
 #check versions for our own depedencies as they are fast-changing
 from pyglui import __version__ as pyglui_version
-assert pyglui_version >= '0.2'
+assert pyglui_version >= '0.1'
 
 #monitoring
 import psutil
 
 # helpers/utils
-from version_utils import VersionFormat
-from methods import normalize, denormalize
+from methods import normalize, denormalize,Temp
 from video_capture import autoCreateCapture, FileCaptureError, EndofVideoFileError, CameraCaptureError, FakeCapture
 
 
@@ -51,6 +50,7 @@ from display_recent_gaze import Display_Recent_Gaze
 from pupil_server import Pupil_Server
 from pupil_remote import Pupil_Remote
 from marker_detector import Marker_Detector
+from fixation_detector import Fixation_Detector, Dispersion_Fixation_Detector
 
 #manage plugins
 user_launchable_plugins = [Show_Calibration,Pupil_Server,Pupil_Remote,Marker_Detector] # TODO: Dispersion_Fixation_Detector
@@ -135,15 +135,10 @@ def world(g_pool,cap_src,cap_size):
 
     # load session persistent settings
     session_settings = Persistent_Dict(os.path.join(g_pool.user_dir,'user_settings_world'))
-    if session_settings.get("version",VersionFormat('0.0')) < g_pool.version:
-        logger.info("Session setting are from older version of this app. I will not use those.")
-        session_settings.clear()
 
     # Initialize capture
-    cap = autoCreateCapture(cap_src, timebase=g_pool.timebase)
-    cap.frame_size = cap_size
-    cap.frame_rate = 24 #default
-    cap.settings = session_settings.get('capture_settings',{})
+    cap = autoCreateCapture(cap_src, cap_size, 24, timebase=g_pool.timebase)
+
     # Test capture
     try:
         frame = cap.get_frame()
@@ -191,7 +186,7 @@ def world(g_pool,cap_src,cap_size):
 
 
     width,height = session_settings.get('window_size',(frame.width, frame.height))
-    window_pos = session_settings.get('window_position',window_position_default)
+    window_pos = session_settings.get('window_position',(0,0)) # not yet using this one.
 
 
     # Initialize glfw
@@ -217,14 +212,15 @@ def world(g_pool,cap_src,cap_size):
 
     # refresh speed settings
     glfwSwapInterval(0)
-    glfwSetWindowPos(main_window,window_pos[0],window_pos[1])
-
+    glfwSetWindowPos(main_window,window_position_default[0],window_position_default[1])
 
     #setup GUI
     g_pool.gui = ui.UI()
     g_pool.gui.scale = session_settings.get('gui_scale',1)
     g_pool.sidebar = ui.Scrolling_Menu("Settings",pos=(-250,0),size=(0,0),header_pos='left')
+    g_pool.sidebar.configuration = session_settings.get('side_bar_config',{})
     general_settings = ui.Growing_Menu('General')
+    general_settings.configuration = session_settings.get('general_menu_config',{})
     general_settings.append(ui.Slider('scale', setter=set_scale,getter=get_scale,step = .05,min=1.,max=2.5,label='Interface size'))
     general_settings.append(ui.Button('Reset window size',lambda: glfwSetWindowSize(main_window,frame.width,frame.height)) )
     general_settings.append(ui.Selector('Open plugin', selection = user_launchable_plugins,
@@ -232,18 +228,19 @@ def world(g_pool,cap_src,cap_size):
                                         setter= open_plugin, getter=lambda: "Select to load"))
     g_pool.sidebar.append(general_settings)
     advanced_settings = ui.Growing_Menu('Advanced')
+    advanced_settings.configuration = session_settings.get('advanced_menu_config',{'collapsed':True})
     advanced_settings.append(ui.Selector('update_textures',g_pool,label="Update display",selection=range(3),labels=('No update','Gray','Color')))
     advanced_settings.append(ui.Slider('pupil_confidence_threshold', g_pool,step = .01,min=0.,max=1.,label='Minimum pupil confidence'))
     advanced_settings.append(ui.Button('Set timebase to 0',reset_timebase))
     advanced_settings.append(ui.Info_Text('Capture Version: %s'%g_pool.version))
-    general_settings.append(advanced_settings)
 
+    general_settings.append(advanced_settings)
     g_pool.calibration_menu = ui.Growing_Menu('Calibration')
+    g_pool.calibration_menu.configuration = session_settings.get('calibration_menu_config',{})
     g_pool.calibration_menu.append(ui.Selector('active_calibration_plugin',g_pool, selection = calibration_plugins,
                                         labels = [p.__name__.replace('_',' ') for p in calibration_plugins],
                                         setter= set_calibration_plugin,label='Method'))
     g_pool.sidebar.append(g_pool.calibration_menu)
-
     g_pool.gui.append(g_pool.sidebar)
 
     g_pool.quickbar = ui.Stretching_Menu('Quick Bar',(0,100),(120,-100))
@@ -251,6 +248,7 @@ def world(g_pool,cap_src,cap_size):
     g_pool.gui.append(ui.Hot_Key("quit",setter=on_close,getter=lambda:True,label="X",hotkey=GLFW_KEY_ESCAPE))
 
     g_pool.capture.init_gui(g_pool.sidebar)
+    g_pool.capture.menu.configuration = session_settings.get('capture_menu_config',{})
 
     #plugins that are loaded based on user settings from previous session
     g_pool.plugins = Plugin_List(g_pool,plugin_by_name,session_settings.get('loaded_plugins',default_plugins))
@@ -261,10 +259,9 @@ def world(g_pool,cap_src,cap_size):
             g_pool.active_calibration_plugin =  p.__class__
             break
 
+
+
     on_resize(main_window, *glfwGetWindowSize(main_window))
-
-    g_pool.gui.configuration = session_settings.get('ui_config',{})
-
 
     #set up performace graphs:
     pid = os.getpid()
@@ -321,6 +318,19 @@ def world(g_pool,cap_src,cap_size):
             pupil_graph.add(p['confidence'])
         events['pupil_positions'] = recent_pupil_positions
 
+        recent_glint_positions = []
+        while not g_pool.glints.empty():
+            g = g_pool.glints.get()
+            recent_glint_positions.append(g)
+        events['glint_positions'] = recent_glint_positions
+
+
+        recent_glint_pupil_vectors = []
+        while not g_pool.glint_pupil_vectors.empty():
+            v = g_pool.glint_pupil_vectors.get()
+            recent_glint_pupil_vectors.append(v)
+        events['glint_pupil_vectors'] = recent_glint_pupil_vectors
+
         # allow each Plugin to do its work.
         for p in g_pool.plugins:
             p.update(frame,events)
@@ -356,12 +366,14 @@ def world(g_pool,cap_src,cap_size):
     session_settings['loaded_plugins'] = g_pool.plugins.get_initializers()
     session_settings['pupil_confidence_threshold'] = g_pool.pupil_confidence_threshold
     session_settings['gui_scale'] = g_pool.gui.scale
-    session_settings['ui_config'] = g_pool.gui.configuration
-    session_settings['capture_settings'] = g_pool.capture.settings
+    session_settings['side_bar_config'] = g_pool.sidebar.configuration
+    session_settings['capture_menu_config'] = g_pool.capture.menu.configuration
+    session_settings['general_menu_config'] = general_settings.configuration
+    session_settings['advanced_menu_config'] = advanced_settings.configuration
+    session_settings['calibration_menu_config']=g_pool.calibration_menu.configuration
     session_settings['window_size'] = glfwGetWindowSize(main_window)
     session_settings['window_position'] = glfwGetWindowPos(main_window)
     session_settings['update_textures'] = g_pool.update_textures
-    session_settings['version'] = g_pool.version
     session_settings.close()
 
     # de-init all running plugins
@@ -369,10 +381,9 @@ def world(g_pool,cap_src,cap_size):
         p.alive = False
     g_pool.plugins.clean()
 
+    cap.close()
     glfwDestroyWindow(main_window)
     glfwTerminate()
-    cap.close()
-
     logger.debug("Process done")
 
 def world_profiled(g_pool,cap_src,cap_size):

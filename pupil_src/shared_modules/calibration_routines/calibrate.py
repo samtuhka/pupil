@@ -12,6 +12,7 @@ import numpy as np
 #logging
 import logging
 logger = logging.getLogger(__name__)
+import statsmodels.api as sm
 
 
 def get_map_from_cloud(cal_pt_cloud,screen_size=(2,2),threshold = 35,return_inlier_map=False,return_params=False):
@@ -58,7 +59,7 @@ def get_map_from_cloud(cal_pt_cloud,screen_size=(2,2),threshold = 35,return_inli
 
 
 
-def fit_poly_surface(cal_pt_cloud,n=7):
+def fit_poly_surface_old(cal_pt_cloud,n=7):
     M = make_model(cal_pt_cloud,n)
     U,w,Vt = np.linalg.svd(M[:,:n],full_matrices=0)
     V = Vt.transpose()
@@ -66,7 +67,18 @@ def fit_poly_surface(cal_pt_cloud,n=7):
     pseudINV = np.dot(V, np.dot(np.diag(1/w), Ut))
     cx = np.dot(pseudINV, M[:,n])
     cy = np.dot(pseudINV, M[:,n+1])
+
     # compute model error in world screen units if screen_res specified
+    err_x=(np.dot(M[:,:n],cx)-M[:,n])
+    err_y=(np.dot(M[:,:n],cy)-M[:,n+1])
+    return cx,cy,err_x,err_y
+
+def fit_poly_surface(cal_pt_cloud,n=7):
+    M = make_model(cal_pt_cloud,n)
+    rlmX = sm.RLM(M[:,n], M[:,:n]).fit()
+    rlmY = sm.RLM(M[:,n+1], M[:,:n]).fit()
+    cx = rlmX.params
+    cy = rlmY.params
     err_x=(np.dot(M[:,:n],cx)-M[:,n])
     err_y=(np.dot(M[:,:n],cy)-M[:,n+1])
     return cx,cy,err_x,err_y
@@ -176,7 +188,31 @@ def preprocess_data(pupil_pts,ref_pts):
             break
     return cal_data
 
-
+def preprocess_data_glint(glint_pupil_pts, ref_pts):
+    cal_data =[]
+    if len(ref_pts)<=2:
+        return cal_data
+    cur_ref_pt = ref_pts.pop(0)
+    next_ref_pt = ref_pts.pop(0)
+    while True:
+        matched = []
+        while glint_pupil_pts:
+             #select all points past the half-way point between current and next ref data sample
+            if glint_pupil_pts[0]['timestamp'] <=(cur_ref_pt['timestamp']+next_ref_pt['timestamp'])/2.:
+                matched.append(glint_pupil_pts.pop(0))
+            else:
+                for gp_pt in matched:
+                    #only use close points
+                    if abs(gp_pt['timestamp']-cur_ref_pt['timestamp']) <= 1/15.: #assuming 30fps + slack
+                        data_pt = gp_pt['x'], gp_pt['y'],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1]
+                        cal_data.append(data_pt)
+                break
+        if ref_pts:
+            cur_ref_pt = next_ref_pt
+            next_ref_pt = ref_pts.pop(0)
+        else:
+            break
+    return cal_data
 
 # if __name__ == '__main__':
 #     import matplotlib.pyplot as plt
