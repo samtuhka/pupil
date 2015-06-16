@@ -34,7 +34,7 @@ class Glint_Detector(object):
         self.g_pool = g_pool
         self.session_settings = Persistent_Dict(os.path.join(g_pool.user_dir,'user_settings_glint_detector') )
 
-        self.glint_dist = self.session_settings.get('glint_dist', 1.5)
+        self.glint_dist = self.session_settings.get('glint_dist', 3.0)
         self.glint_thres = self.session_settings.get('glint_thres',185.)
         self.glint_min = self.session_settings.get('glint_min',50.)
         self.glint_max = self.session_settings.get('glint_max',500.)
