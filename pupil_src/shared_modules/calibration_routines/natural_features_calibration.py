@@ -120,7 +120,6 @@ class Natural_Features_Calibration(Calibration_Plugin):
         self.g_pool.plugins.add(Simple_Gaze_Mapper(self.g_pool,params))
 
         if self.calGlint:
-            prms = params, params2
             self.g_pool.plugins.add(Glint_Gaze_Mapper(self.g_pool, params2))
 
 

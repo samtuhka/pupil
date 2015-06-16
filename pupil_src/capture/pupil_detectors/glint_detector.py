@@ -32,6 +32,13 @@ class Glint_Detector(object):
     def __init__(self, g_pool):
         super(Glint_Detector, self).__init__()
         self.g_pool = g_pool
+        self.session_settings = Persistent_Dict(os.path.join(g_pool.user_dir,'user_settings_glint_detector') )
+
+        self.glint_dist = self.session_settings.get('glint_dist', 1.5)
+        self.glint_thres = self.session_settings.get('glint_thres',185.)
+        self.glint_min = self.session_settings.get('glint_min',50.)
+        self.glint_max = self.session_settings.get('glint_max',500.)
+
 
 
     def irisDetection(self, img, pupil):
@@ -71,7 +78,7 @@ class Glint_Detector(object):
         minDist = 10000
         if pupil['confidence']>0.60:
             pupilCenter = pupil['center']
-            maxDist = 1.5 * pupilDiameter
+            maxDist = self.glint_dist * (1.0*pupilDiameter/2)
             for glint in glints:
                 dist = math.sqrt((glint[1] - pupilCenter[0])**2 + (glint[2] - pupilCenter[1])**2)
                 if dist < maxDist and dist < minDist:
@@ -84,10 +91,10 @@ class Glint_Detector(object):
         return glints
 
     def glint(self,frame, u_roi, pupil):
-        gray = frame.gray[u_roi.view]
-        val,binImg = cv2.threshold(gray, 185, 255, cv2.THRESH_BINARY)
-        timestamp = frame.timestamp
 
+        gray = frame.gray[u_roi.view]
+        val,binImg = cv2.threshold(gray, self.glint_thres, 255, cv2.THRESH_BINARY)
+        timestamp = frame.timestamp
         st7 = cv2.getStructuringElement(cv2.MORPH_CROSS,(7,7))
         binImg= cv2.morphologyEx(binImg, cv2.MORPH_OPEN, st7)
         binImg = cv2.morphologyEx(binImg, cv2.MORPH_DILATE, st7, iterations=2)
@@ -96,7 +103,7 @@ class Glint_Detector(object):
         glints = []
         for cnt in contours:
             area = cv2.contourArea(cnt)
-            if area > 50 and area<500:
+            if area > self.glint_min and area< self.glint_max:
                 centroid = self.contourCenter(cnt)
                 newRow = [timestamp, centroid[0], centroid[1], centroid[0]*1.0/frame.img.shape[1], (frame.img.shape[0]-centroid[1]*1.0)/frame.img.shape[0]]
                 glints.append (newRow)
@@ -104,6 +111,7 @@ class Glint_Detector(object):
         #    self.irisDetection(gray, pupil)
         glints = self.filterGlints(frame, glints, pupil)
         return glints
+
 
     def contourCenter(self, cnt):
         m = cv2.moments(cnt)
@@ -114,5 +122,21 @@ class Glint_Detector(object):
         return retVal
 
 
+    def init_gui(self,sidebar):
+        self.menu = ui.Growing_Menu('Glint  Detector')
+        self.menu.configuration = self.session_settings.get('menu_config',{'collapsed':True})
+        self.menu.append(ui.Slider('glint_dist',self,label='Distance from pupil',min=0,max=5,step=0.5))
+        self.menu.append(ui.Slider('glint_thres',self,label='Intensity threshold',min=0,max=255,step=1))
+        self.menu.append(ui.Slider('glint_min',self,label='Min size',min=1,max=100,step=1))
+        self.menu.append(ui.Slider('glint_max',self,label='Max size',min=50,max=500,step=1))
+        sidebar.append(self.menu)
 
+
+    def cleanup(self):
+        self.session_settings['glint_thres'] = self.glint_thres
+        self.session_settings['glint_min'] = self.glint_min
+        self.session_settings['glint_max'] = self.glint_max
+        self.session_settings['glint_dist'] = self.glint_dist
+        self.session_settings['menu_config'] = self.menu.configuration
+        self.session_settings.close()
 

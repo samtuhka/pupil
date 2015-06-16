@@ -268,7 +268,6 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud_glint.npy'),cal_pt_cloud_glint)
 
         if self.calGlint:
-            prms = params, params2
             self.g_pool.plugins.add(Glint_Gaze_Mapper(self.g_pool, params2))
 
 

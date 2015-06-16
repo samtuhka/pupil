@@ -248,6 +248,8 @@ def eye(g_pool,cap_src,cap_size,rx_from_world,eye_id=0):
     # let detector add its GUI
     pupil_detector.init_gui(g_pool.sidebar)
 
+    glint_detector.init_gui(g_pool.sidebar)
+
 
     #set the last saved window size
     on_resize(main_window, *glfwGetWindowSize(main_window))
@@ -397,6 +399,7 @@ def eye(g_pool,cap_src,cap_size,rx_from_world,eye_id=0):
     session_settings.close()
 
     pupil_detector.cleanup()
+    glint_detector.cleanup()
     cap.close()
     glfwDestroyWindow(main_window)
     glfwTerminate()
