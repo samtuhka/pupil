@@ -177,7 +177,10 @@ def preprocess_data(pupil_pts,ref_pts):
                 for p_pt in matched:
                     #only use close points
                     if abs(p_pt['timestamp']-cur_ref_pt['timestamp']) <= 1/15.: #assuming 30fps + slack
-                        data_pt = p_pt["norm_pos"][0], p_pt["norm_pos"][1],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1],p_pt['timestamp']
+                        try:
+                            data_pt = p_pt["norm_pos"][0], p_pt["norm_pos"][1],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1],p_pt['timestamp'], cur_ref_pt['screenpos'][0], cur_ref_pt['screenpos'][1]
+                        except:
+                            data_pt = p_pt["norm_pos"][0], p_pt["norm_pos"][1],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1],p_pt['timestamp']
                         cal_data.append(data_pt)
                 break
         if ref_pts:
@@ -203,7 +206,10 @@ def preprocess_data_glint(glint_pupil_pts, ref_pts):
                 for gp_pt in matched:
                     #only use close points
                     if abs(gp_pt['timestamp']-cur_ref_pt['timestamp']) <= 1/15.: #assuming 30fps + slack
-                        data_pt = gp_pt['x'], gp_pt['y'],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1], gp_pt['timestamp']
+                        try:
+                            data_pt = gp_pt['x'], gp_pt['y'],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1], gp_pt['timestamp'], cur_ref_pt['screenpos'][0], cur_ref_pt['screenpos'][1]
+                        except:
+                            data_pt = gp_pt['x'], gp_pt['y'],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1], gp_pt['timestamp']
                         cal_data.append(data_pt)
                 break
         if ref_pts:

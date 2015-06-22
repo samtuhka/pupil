@@ -306,7 +306,10 @@ class Screen_Marker_Calibration(Calibration_Plugin):
                 self.detected = False
                 self.pos = None #indicate that no reference is detected
 
-
+            #use np.arrays for per element wise math
+            self.display_pos = np.array(self.sites[self.active_site])
+            p_window_size = glfwGetWindowSize(self._window)
+            screen_pos = denormalize(self.display_pos,p_window_size,flip_y=True)
             #only save a valid ref position if within sample window of calibraiton routine
             on_position = self.lead_in < self.screen_marker_state < (self.lead_in+self.sample_duration)
 
@@ -314,6 +317,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
                 ref = {}
                 ref["norm_pos"] = self.pos
                 ref["timestamp"] = frame.timestamp
+                ref["screenpos"] = screen_pos
                 self.ref_list.append(ref)
 
             #always save pupil positions
@@ -338,8 +342,6 @@ class Screen_Marker_Calibration(Calibration_Plugin):
                     return
 
 
-            #use np.arrays for per element wise math
-            self.display_pos = np.array(self.sites[self.active_site])
             self.on_position = on_position
             self.button.status_text = '%s / %s'%(self.active_site,9)
 
@@ -403,7 +405,6 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
         screen_pos = denormalize(self.display_pos,p_window_size,flip_y=True)
         alpha = interp_fn(self.screen_marker_state,0.,1.,float(self.sample_duration+self.lead_in+self.lead_out),float(self.lead_in),float(self.sample_duration+self.lead_in))
-
         draw_marker(screen_pos,r,alpha)
         #some feedback on the detection state
 
