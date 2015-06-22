@@ -11,7 +11,6 @@
 import sys, os, platform
 from time import sleep
 from ctypes import c_bool, c_double
-import numpy as np
 
 if platform.system() == 'Darwin':
     from billiard import Process, Pipe, Queue, Value, freeze_support, forking_enable
@@ -23,6 +22,8 @@ if getattr(sys, 'frozen', False):
     # Specifiy user dirs.
     user_dir = os.path.expanduser(os.path.join('~','pupil_capture_settings'))
     version_file = os.path.join(sys._MEIPASS,'_version_string_')
+
+
 else:
     # We are running in a normal Python environment.
     # Make all pupil shared_modules available to this Python session.
@@ -87,6 +88,7 @@ class Global_Container(object):
     pass
 
 def main():
+
     # To assign camera by name: put string(s) in list
     eye_cam_names = ["USB 2.0 Camera","Microsoft", "6000","Integrated Camera","HD USB Camera"]
     world_src = ["Logitech Camera","(046d:081d)","C510","B525", "C525","C615","C920","C930e"]
@@ -125,6 +127,7 @@ def main():
     g_pool.app = 'capture'
     g_pool.binocular = binocular
 
+
     p_eye = []
     for eye_id in range(1+1*binocular):
         rx,tx = Pipe(False)
@@ -136,6 +139,7 @@ def main():
             sleep(0.5)
 
     world(g_pool,world_src,world_size)
+
 
     # Exit / clean-up
     for p in p_eye:

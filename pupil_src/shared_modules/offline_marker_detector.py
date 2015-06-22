@@ -53,9 +53,8 @@ class Offline_Marker_Detector(Plugin):
     See marker_tracker.py for more info on this marker tracker.
     """
 
-    def __init__(self,g_pool,menu_conf={'pos':(300,200),'size':(300,300),'collapsed':False},mode="Show Markers and Frames"):
+    def __init__(self,g_pool,mode="Show Markers and Frames"):
         super(Offline_Marker_Detector, self).__init__(g_pool)
-        self.menu_conf = menu_conf
         self.order = .2
 
 
@@ -69,10 +68,10 @@ class Offline_Marker_Detector(Plugin):
         self.surface_definitions = Persistent_Dict(os.path.join(g_pool.rec_dir,'surface_definitions'))
         if self.surface_definitions.get('offline_square_marker_surfaces',[]) != []:
             logger.debug("Found ref surfaces defined or copied in previous session.")
-            self.surfaces = [Offline_Reference_Surface(self.g_pool,saved_definition=d,gaze_positions_by_frame=self.g_pool.positions_by_frame) for d in self.surface_definitions.get('offline_square_marker_surfaces',[]) if isinstance(d,dict)]
+            self.surfaces = [Offline_Reference_Surface(self.g_pool,saved_definition=d) for d in self.surface_definitions.get('offline_square_marker_surfaces',[]) if isinstance(d,dict)]
         elif self.surface_definitions.get('realtime_square_marker_surfaces',[]) != []:
             logger.debug("Did not find ref surfaces def created or used by the user in player from earlier session. Loading surfaces defined during capture.")
-            self.surfaces = [Offline_Reference_Surface(self.g_pool,saved_definition=d,gaze_positions_by_frame=self.g_pool.positions_by_frame) for d in self.surface_definitions.get('realtime_square_marker_surfaces',[]) if isinstance(d,dict)]
+            self.surfaces = [Offline_Reference_Surface(self.g_pool,saved_definition=d) for d in self.surface_definitions.get('realtime_square_marker_surfaces',[]) if isinstance(d,dict)]
         else:
             logger.debug("No surface defs found. Please define using GUI.")
             self.surfaces = []
@@ -92,7 +91,6 @@ class Offline_Marker_Detector(Plugin):
 
         #debug vars
         self.show_surface_idx = c_int(0)
-        self.recent_pupil_positions = []
 
         self.img_shape = None
         self.img = None
@@ -101,7 +99,6 @@ class Offline_Marker_Detector(Plugin):
 
     def init_gui(self):
         self.menu = ui.Scrolling_Menu('Offline Marker Tracker')
-        self.menu.configuration = self.menu_conf
         self.g_pool.gui.append(self.menu)
 
 
@@ -114,7 +111,6 @@ class Offline_Marker_Detector(Plugin):
     def deinit_gui(self):
         if self.menu:
             self.g_pool.gui.remove(self.menu)
-            self.menu_conf= self.menu.configuration
             self.menu= None
         if self.add_button:
             self.g_pool.quickbar.remove(self.add_button)
@@ -122,12 +118,11 @@ class Offline_Marker_Detector(Plugin):
 
     def update_gui_markers(self):
         pass
-        # self._bar.clear()
         self.menu.elements[:] = []
         self.menu.append(ui.Info_Text('The offline marker tracker will look for markers in the entire video. By default it uses surfaces defined in capture. You can change and add more surfaces here.'))
         self.menu.append(ui.Button('Close',self.close))
         self.menu.append(ui.Selector('mode',self,label='Mode',selection=["Show Markers and Frames","Show marker IDs", "Surface edit mode","Show Heatmaps","Show Metrics"] ))
-        self.menu.append(ui.Info_Text('To see heatmap or surface metrics visualizations, click (re)-calculate gaze distributions. Set "X size" and "Y size" for each surface to see heatmap visualizations.'))        
+        self.menu.append(ui.Info_Text('To see heatmap or surface metrics visualizations, click (re)-calculate gaze distributions. Set "X size" and "Y size" for each surface to see heatmap visualizations.'))
         self.menu.append(ui.Button("(Re)-calculate gaze distributions", self.recalculate))
         self.menu.append(ui.Button("Export gaze and surface data", self.save_surface_statsics_to_file))
         self.menu.append(ui.Button("Add surface", lambda:self.add_surface('_')))
@@ -136,7 +131,6 @@ class Offline_Marker_Detector(Plugin):
             s_menu = ui.Growing_Menu("Surface %s"%idx)
             s_menu.collapsed=True
             s_menu.append(ui.Text_Input('name',s))
-            #     self._bar.add_var("%s_markers"%i,create_string_buffer(512), getter=s.atb_marker_status,group=str(i),label='found/registered markers' )
             s_menu.append(ui.Text_Input('x',s.real_world_size,label='X size'))
             s_menu.append(ui.Text_Input('y',s.real_world_size,label='Y size'))
             s_menu.append(ui.Button('Open Debug Window',s.open_close_window))
@@ -176,7 +170,7 @@ class Offline_Marker_Detector(Plugin):
         pass
 
     def add_surface(self,_):
-        self.surfaces.append(Offline_Reference_Surface(self.g_pool,gaze_positions_by_frame=self.g_pool.positions_by_frame))
+        self.surfaces.append(Offline_Reference_Surface(self.g_pool))
         self.update_gui_markers()
 
     def remove_surface(self,i):
@@ -197,7 +191,6 @@ class Offline_Marker_Detector(Plugin):
                 s.generate_heatmap(section)
 
         # calc metrics:
-        gaze_in_section = list(chain(*self.g_pool.positions_by_frame[section]))
         results = []
         for s in self.surfaces:
             gaze_on_srf  = s.gaze_on_srf_in_section(section)
@@ -226,7 +219,6 @@ class Offline_Marker_Detector(Plugin):
 
 
     def update(self,frame,events):
-        recent_pupil_positions = events['pupil_positions']
         self.img = frame.img
         self.img_shape = frame.img.shape
         self.update_marker_cache()
@@ -444,7 +436,7 @@ class Offline_Marker_Detector(Plugin):
             csv_writer = csv.writer(csvfile, delimiter='\t',quotechar='|', quoting=csv.QUOTE_MINIMAL)
 
             # gaze distribution report
-            gaze_in_section = list(chain(*self.g_pool.positions_by_frame[section]))
+            gaze_in_section = list(chain(*self.g_pool.gaze_positions_by_frame[section]))
             not_on_any_srf = set([gp['timestamp'] for gp in gaze_in_section])
 
             csv_writer.writerow(('total_gaze_point_count',len(gaze_in_section)))
@@ -505,8 +497,8 @@ class Offline_Marker_Detector(Plugin):
                 for idx,ts,ref_srf_data in zip(range(len(self.g_pool.timestamps)),self.g_pool.timestamps,s.cache):
                     if in_mark <= idx <= out_mark:
                         if ref_srf_data is not None and ref_srf_data is not False:
-                            for gp in ref_srf_data['gaze_on_srf']:
-                                gp_x,gp_y = gp['norm_gaze_on_srf']
+                            for gp in s.gaze_on_srf_by_frame_idx(idx,ref_srf_data['m_from_screen']):
+                                gp_x,gp_y = gp['norm_pos']
                                 on_srf = (0 <= gp_x <= 1) and (0 <= gp_y <= 1)
                                 csv_writer.writerow( (idx,ts,gp['timestamp'],gp_x,gp_y,gp_x*s.real_world_size['x'],gp_x*s.real_world_size['y'],on_srf) )
 
@@ -539,12 +531,7 @@ class Offline_Marker_Detector(Plugin):
 
 
     def get_init_dict(self):
-        if self.menu:
-            d = {'menu_conf':self.menu.configuration,'mode':self.mode}
-        else:
-            d = {'menu_conf':self.menu_conf,'mode':self.mode}
-        return d
-
+        return {'mode':self.mode}
 
 
     def cleanup(self):

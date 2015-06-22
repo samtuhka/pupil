@@ -37,7 +37,7 @@ class Manual_Marker_Calibration(Calibration_Plugin):
             Find contours and filter into 2 level list using RETR_CCOMP
             Fit ellipses
     """
-    def __init__(self, g_pool,menu_conf = {'collapsed':True}):
+    def __init__(self, g_pool):
         super(Manual_Marker_Calibration, self).__init__(g_pool)
         self.active = False
         self.detected = False
@@ -59,7 +59,6 @@ class Manual_Marker_Calibration(Calibration_Plugin):
         self.auto_stop_max = 30
 
         self.menu = None
-        self.menu_conf = menu_conf
         self.button = None
 
 
@@ -69,15 +68,10 @@ class Manual_Marker_Calibration(Calibration_Plugin):
         self.g_pool.calibration_menu.append(self.info)
 
         self.menu = ui.Growing_Menu('Controls')
-        self.menu.configuration = self.menu_conf
         self.g_pool.calibration_menu.append(self.menu)
 
-
-        submenu = ui.Growing_Menu('Advanced')
-        submenu.collapsed = True
-        self.menu.append(submenu)
-        submenu.append(ui.Slider('aperture',self,min=3,step=2,max=11,label='filter aperture'))
-        submenu.append(ui.Switch('show_edges',self,label='show edges'))
+        self.menu.append(ui.Slider('aperture',self,min=3,step=2,max=11,label='filter aperture'))
+        self.menu.append(ui.Switch('show_edges',self,label='show edges'))
 
         self.button = ui.Thumb('active',self,setter=self.toggle,label='Calibrate',hotkey='c')
         self.button.on_color[:] = (.3,.2,1.,.9)
@@ -137,7 +131,6 @@ class Manual_Marker_Calibration(Calibration_Plugin):
 
         if self.calGlint:
             self.g_pool.plugins.add(Glint_Gaze_Mapper(self.g_pool, params2))
-
 
     def update(self,frame,events):
         """
@@ -264,10 +257,7 @@ class Manual_Marker_Calibration(Calibration_Plugin):
 
 
     def get_init_dict(self):
-        if self.menu:
-            return {'menu_conf':self.menu.configuration}
-        else:
-            return {'menu_conf':self.menu_conf}
+        return {}
 
     def gl_display(self):
         """

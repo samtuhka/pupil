@@ -11,6 +11,13 @@
 import logging
 logger = logging.getLogger(__name__)
 
+
+'''
+A simple example Plugin: 'display_recent_gaze.py'
+It is a good starting point to build your own plugin.
+'''
+
+
 class Plugin(object):
     """docstring for Plugin
     plugin is a base class
@@ -160,7 +167,7 @@ class Gaze_Mapping_Plugin(Plugin):
 
 
 class Plugin_List(object):
-    """This is the Plugin Manger
+    """This is the Plugin Manager
         It is a self sorting list with a few functions to manage adding and removing Plugins and lacking most other list methods.
     """
     def __init__(self,g_pool,plugin_by_name,plugin_initializers):
@@ -211,7 +218,7 @@ class Plugin_List(object):
 
     def clean(self):
         '''
-        plugins may flag themselvse as dead or are flagged as dead. We need to remove them.
+        plugins may flag themselves as dead or are flagged as dead. We need to remove them.
         '''
         for p in self._plugins[:]:
             if not p.alive: # reading p.alive will trigger the plug-in cleanup fn.

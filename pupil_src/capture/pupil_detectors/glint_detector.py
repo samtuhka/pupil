@@ -91,7 +91,6 @@ class Glint_Detector(object):
         return glints
 
     def glint(self,frame, u_roi, pupil):
-
         gray = frame.gray[u_roi.view]
         val,binImg = cv2.threshold(gray, self.glint_thres, 255, cv2.THRESH_BINARY)
         timestamp = frame.timestamp
@@ -124,7 +123,6 @@ class Glint_Detector(object):
 
     def init_gui(self,sidebar):
         self.menu = ui.Growing_Menu('Glint  Detector')
-        self.menu.configuration = self.session_settings.get('menu_config',{'collapsed':True})
         self.menu.append(ui.Slider('glint_dist',self,label='Distance from pupil',min=0,max=5,step=0.5))
         self.menu.append(ui.Slider('glint_thres',self,label='Intensity threshold',min=0,max=255,step=1))
         self.menu.append(ui.Slider('glint_min',self,label='Min size',min=1,max=100,step=1))
@@ -137,6 +135,5 @@ class Glint_Detector(object):
         self.session_settings['glint_min'] = self.glint_min
         self.session_settings['glint_max'] = self.glint_max
         self.session_settings['glint_dist'] = self.glint_dist
-        self.session_settings['menu_config'] = self.menu.configuration
         self.session_settings.close()
 

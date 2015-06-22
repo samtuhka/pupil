@@ -67,7 +67,6 @@ def fit_poly_surface_old(cal_pt_cloud,n=7):
     pseudINV = np.dot(V, np.dot(np.diag(1/w), Ut))
     cx = np.dot(pseudINV, M[:,n])
     cy = np.dot(pseudINV, M[:,n+1])
-
     # compute model error in world screen units if screen_res specified
     err_x=(np.dot(M[:,:n],cx)-M[:,n])
     err_y=(np.dot(M[:,:n],cy)-M[:,n+1])
@@ -178,7 +177,7 @@ def preprocess_data(pupil_pts,ref_pts):
                 for p_pt in matched:
                     #only use close points
                     if abs(p_pt['timestamp']-cur_ref_pt['timestamp']) <= 1/15.: #assuming 30fps + slack
-                        data_pt = p_pt["norm_pos"][0], p_pt["norm_pos"][1],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1]
+                        data_pt = p_pt["norm_pos"][0], p_pt["norm_pos"][1],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1],p_pt['timestamp']
                         cal_data.append(data_pt)
                 break
         if ref_pts:
@@ -204,7 +203,7 @@ def preprocess_data_glint(glint_pupil_pts, ref_pts):
                 for gp_pt in matched:
                     #only use close points
                     if abs(gp_pt['timestamp']-cur_ref_pt['timestamp']) <= 1/15.: #assuming 30fps + slack
-                        data_pt = gp_pt['x'], gp_pt['y'],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1]
+                        data_pt = gp_pt['x'], gp_pt['y'],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1], gp_pt['timestamp']
                         cal_data.append(data_pt)
                 break
         if ref_pts:
