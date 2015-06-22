@@ -158,9 +158,7 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
         self.screen_marker_state = 0
         self.active = False
         self.close_window()
-
         pt_cloud = preprocess_data(self.gaze_list,self.ref_list)
-
         logger.info("Collected %s data points." %len(pt_cloud))
 
         if len(pt_cloud) < 20:

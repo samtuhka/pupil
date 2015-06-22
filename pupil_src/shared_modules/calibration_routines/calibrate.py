@@ -178,7 +178,7 @@ def preprocess_data(pupil_pts,ref_pts):
                     #only use close points
                     if abs(p_pt['timestamp']-cur_ref_pt['timestamp']) <= 1/15.: #assuming 30fps + slack
                         try:
-                            data_pt = p_pt["norm_pos"][0], p_pt["norm_pos"][1],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1],p_pt['timestamp'], cur_ref_pt['screenpos'][0], cur_ref_pt['screenpos'][1]
+                            data_pt = p_pt["norm_pos"][0], p_pt["norm_pos"][1],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1], cur_ref_pt['screenpos'][0], cur_ref_pt['screenpos'][1], p_pt['timestamp']
                         except:
                             data_pt = p_pt["norm_pos"][0], p_pt["norm_pos"][1],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1],p_pt['timestamp']
                         cal_data.append(data_pt)
@@ -207,7 +207,7 @@ def preprocess_data_glint(glint_pupil_pts, ref_pts):
                     #only use close points
                     if abs(gp_pt['timestamp']-cur_ref_pt['timestamp']) <= 1/15.: #assuming 30fps + slack
                         try:
-                            data_pt = gp_pt['x'], gp_pt['y'],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1], gp_pt['timestamp'], cur_ref_pt['screenpos'][0], cur_ref_pt['screenpos'][1]
+                            data_pt = gp_pt['x'], gp_pt['y'],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1],cur_ref_pt['screenpos'][0], cur_ref_pt['screenpos'][1], gp_pt['timestamp']
                         except:
                             data_pt = gp_pt['x'], gp_pt['y'],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1], gp_pt['timestamp']
                         cal_data.append(data_pt)
@@ -256,7 +256,7 @@ def preprocess_data_glint(glint_pupil_pts, ref_pts):
 
 
 #     # plot projection of eye and world vs observed data
-#     X,Y,ZX,ZY = cal_pt_cloud.transpose().copy()
+#     X,Y,ZX,ZY = cal_pt_cloud.transpose().copy( gp_pt['timestamp'])
 #     X,Y = map_fn((X,Y))
 #     X *= 1280/2.
 #     Y *= 720/2.
