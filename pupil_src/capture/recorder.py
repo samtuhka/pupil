@@ -165,6 +165,7 @@ class Recorder(Plugin):
 
     def start(self):
         self.timestamps = []
+        self.timestampsNonMono = []
         self.pupil_list = []
         self.gaze_list = []
         self.glint_list = []
@@ -199,7 +200,7 @@ class Recorder(Plugin):
             f.write("Recording Name\t"+self.session_name+ "\n")
             f.write("Start Date\t"+ strftime("%d.%m.%Y", localtime(self.start_time))+ "\n")
             f.write("Start Time\t"+ strftime("%H:%M:%S", localtime(self.start_time))+ "\n")
-
+            f.write("Start Time (seconds since epoch)\t"+ str(self.start_time)+ "\n")
 
         if self.audio_src != 'No Audio':
             audio_path = os.path.join(self.rec_path, "world.wav")
@@ -256,6 +257,7 @@ class Recorder(Plugin):
             for glint in events['glint_positions']:
                 self.glint_list += glint
             self.timestamps.append(frame.timestamp)
+            self.timestampsNonMono.append(time())
             self.writer.write(frame.img)
             self.frame_count += 1
 
@@ -272,7 +274,6 @@ class Recorder(Plugin):
                     tx.send(None)
                 except:
                     logger.warning("Could not stop eye-recording. Please report this bug!")
-
         gaze_list_path = os.path.join(self.rec_path, "gaze_positions.npy")
         np.save(gaze_list_path,np.asarray(self.gaze_list))
 
@@ -286,6 +287,11 @@ class Recorder(Plugin):
         timestamps_path = os.path.join(self.rec_path, "world_timestamps.npy")
         ts = sanitize_timestamps(np.array(self.timestamps))
         np.save(timestamps_path,ts)
+
+        timestampsNonMono_path = os.path.join(self.rec_path, "world_timestampsNonMono.npy")
+        tsNonMono = np.array(self.timestampsNonMono)
+        np.save(timestampsNonMono_path,tsNonMono)
+
 
         try:
             copy2(os.path.join(self.g_pool.user_dir,"surface_definitions"),os.path.join(self.rec_path,"surface_definitions"))

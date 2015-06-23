@@ -256,7 +256,7 @@ def preprocess_data_glint(glint_pupil_pts, ref_pts):
 
 
 #     # plot projection of eye and world vs observed data
-#     X,Y,ZX,ZY = cal_pt_cloud.transpose().copy( gp_pt['timestamp'])
+#     X,Y,ZX,ZY = cal_pt_cloud.transpose().copy()
 #     X,Y = map_fn((X,Y))
 #     X *= 1280/2.
 #     Y *= 720/2.
