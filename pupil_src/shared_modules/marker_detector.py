@@ -41,7 +41,7 @@ class Marker_Detector(Plugin):
             K = np.load(os.path.join(self.g_pool.user_dir,'camera_matrix.npy'))
             dist_coef = np.load(os.path.join(self.g_pool.user_dir,"dist_coefs.npy"))
             img_size = np.load(os.path.join(self.g_pool.user_dir,"camera_resolution.npy"))
-            self.camera_intrinsics = K, dist_coefs, img_size
+            self.camera_intrinsics = K, dist_coef, img_size
         except:
             self.camera_intrinsics = None
 

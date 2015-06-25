@@ -10,10 +10,11 @@
 
 import numpy as np
 import cv2
-from gl_utils import adjust_gl_view,clear_gl_screen,draw_gl_point,basic_gl_setup,cvmat_to_glmat,make_coord_system_norm_based
+from gl_utils import draw_gl_polyline,adjust_gl_view,draw_gl_polyline_norm,clear_gl_screen,draw_gl_point,draw_gl_points,draw_gl_point_norm,draw_gl_points_norm,basic_gl_setup,cvmat_to_glmat, draw_named_texture,make_coord_system_norm_based
 from gl_utils.trackball import Trackball
 from glfw import *
 from OpenGL.GL import *
+from OpenGL.GLU import *
 
 from pyglui.cygl.utils import RGBA
 from pyglui.cygl.utils import draw_polyline_norm,draw_polyline,draw_points_norm,draw_points,draw_named_texture
@@ -203,7 +204,6 @@ class Reference_Surface(object):
         - find overlapping set of surface markers and visible_markers
         - compute homography (and inverse) based on this subset
         """
-
         if not self.defined:
             self.build_correspondance(visible_markers)
         else:
@@ -227,11 +227,12 @@ class Reference_Surface(object):
                 if locate_3d:
 
                     K,dist_coef,img_size = camera_intrinsics
+                    self.img_size = img_size
 
                     ###marker support pose estiamtion:
                     # denormalize image reference points to pixel space
                     yx.shape = -1,2
-                    yx *= img_size
+                    yx *= self.img_size
                     yx.shape = -1, 1, 2
                     # scale normalized object points to world space units (think m,cm,mm)
                     uv.shape = -1,2
@@ -245,18 +246,18 @@ class Reference_Surface(object):
                     # not verifed, potentially usefull info: http://stackoverflow.com/questions/17423302/opencv-solvepnp-tvec-units-and-axes-directions
 
                     ###marker posed estimation from virtually projected points.
-                    # object_pts = np.array([[[0,0],[0,1],[1,1],[1,0]]],dtype=np.float32)
-                    # projected_pts = cv2.perspectiveTransform(object_pts,self.m_to_screen)
-                    # projected_pts.shape = -1,2
-                    # projected_pts *= img_size
-                    # projected_pts.shape = -1, 1, 2
+                    #object_pts = np.array([[[0,0],[0,1],[1,1],[1,0]]],dtype=np.float32)
+                    #projected_pts = cv2.perspectiveTransform(object_pts,self.m_to_screen)
+                    #projected_pts.shape = -1,2
+                    #projected_pts *= img_size
+                    #projected_pts.shape = -1, 1, 2
                     # # scale object points to world space units (think m,cm,mm)
-                    # object_pts.shape = -1,2
-                    # object_pts *= self.real_world_size
+                    #object_pts.shape = -1,2
+                    #object_pts *= self.real_world_size
                     # # convert object points to lie on z==0 plane in 3d space
-                    # object_pts_3d = np.zeros((4,3))
-                    # object_pts_3d[:,:-1] = object_pts
-                    # self.is3dPoseAvailable, rot3d_cam_to_object, translate3d_cam_to_object = cv2.solvePnP(object_pts_3d, projected_pts, K, dist_coef,flags=cv2.CV_EPNP)
+                    #object_pts_3d = np.zeros((4,3))
+                    #object_pts_3d[:,:-1] = object_pts
+                    #self.is3dPoseAvailable, rot3d_cam_to_object, translate3d_cam_to_object = cv2.solvePnP(object_pts_3d, projected_pts, K, dist_coef,flags=cv2.CV_EPNP)
 
 
                     # transformation from Camera Optical Center:
@@ -448,18 +449,22 @@ class Reference_Surface(object):
 
             # Draw the camera frustum and origin using the 3d tranformation obtained from solvepnp
             glPushMatrix()
-            glMultMatrixf(self.camera_pose_3d.T.flatten())
-            draw_frustum(self.img_size, K, 150)
-            glLineWidth(1)
-            draw_frustum(self.img_size, K, .1)
-            draw_coordinate_system(l=5)
-            glPopMatrix()
-
-
+            try:
+                glMultMatrixf(self.camera_pose_3d.T.flatten())
+                draw_frustum(self.img_size, K, 150)
+                glLineWidth(1)
+                draw_frustum(self.img_size, K, .1)
+                draw_coordinate_system(l=5)
+                print "kaikki kunnossa"
+                glPopMatrix()
+            except:
+                print "3d position uupui"
+                glPopMatrix()
             self.trackball.pop()
-
             glfwSwapBuffers(self._window)
             glfwMakeContextCurrent(active_window)
+        if self.window_should_close:
+            self.close_window()
 
 
     def open_window(self):
