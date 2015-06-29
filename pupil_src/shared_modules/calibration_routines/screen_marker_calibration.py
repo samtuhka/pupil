@@ -317,7 +317,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
                 ref = {}
                 ref["norm_pos"] = self.pos
                 ref["timestamp"] = frame.timestamp
-                ref["screenpos"] = screen_pos
+                ref["screenpos"] = self.actualScreenPos(screen_pos)
                 self.ref_list.append(ref)
 
             #always save pupil positions
@@ -420,6 +420,17 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         glfwSwapBuffers(self._window)
         glfwMakeContextCurrent(active_window)
 
+    def actualScreenPos(self, screen_pos):
+        p_window_size = glfwGetWindowSize(self._window)
+        hdpi_factor = glfwGetFramebufferSize(self._window)[0]/glfwGetWindowSize(self._window)[0]
+        r = 110*self.marker_scale * hdpi_factor
+        x = screen_pos[0] + r*.6
+        y = screen_pos[1] +  r*.7
+        x /= (p_window_size[0]+2*0.6*r)
+        y /= (p_window_size[1]+2*0.7*r)
+        x *= p_window_size[0]
+        y *= p_window_size[1]
+        return (int(x),int(y))
 
     def get_init_dict(self):
         d = {}
