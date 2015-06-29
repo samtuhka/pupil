@@ -15,7 +15,7 @@ import numpy as np
 import scipy.spatial as sp
 
 
-
+from shutil import copy2
 from methods import normalize,denormalize
 from gl_utils import draw_gl_point,adjust_gl_view,clear_gl_screen,basic_gl_setup
 import OpenGL.GL as gl
@@ -164,6 +164,11 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
         if len(pt_cloud) < 20:
             logger.warning("Did not collect enough data.")
             return
+
+        try:
+            copy2(os.path.join(self.g_pool.user_dir,"accuracy_test_pt_cloud.npy"),os.path.join(self.g_pool.user_dir,"accuracy_test_pt_cloud_previous.npy"))
+        except:
+            logger.warning("No previous accuracy test results.")
 
         pt_cloud = np.array(pt_cloud)
         np.save(os.path.join(self.g_pool.user_dir,'accuracy_test_pt_cloud.npy'),pt_cloud)
