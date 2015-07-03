@@ -10,11 +10,10 @@
 
 import numpy as np
 import cv2
-from gl_utils import draw_gl_polyline,adjust_gl_view,draw_gl_polyline_norm,clear_gl_screen,draw_gl_point,draw_gl_points,draw_gl_point_norm,draw_gl_points_norm,basic_gl_setup,cvmat_to_glmat, draw_named_texture,make_coord_system_norm_based
+from gl_utils import adjust_gl_view,clear_gl_screen,basic_gl_setup,cvmat_to_glmat,make_coord_system_norm_based
 from gl_utils.trackball import Trackball
 from glfw import *
 from OpenGL.GL import *
-from OpenGL.GLU import *
 
 from pyglui.cygl.utils import RGBA
 from pyglui.cygl.utils import draw_polyline_norm,draw_polyline,draw_points_norm,draw_points,draw_named_texture
@@ -204,6 +203,7 @@ class Reference_Surface(object):
         - find overlapping set of surface markers and visible_markers
         - compute homography (and inverse) based on this subset
         """
+
         if not self.defined:
             self.build_correspondance(visible_markers)
         else:
@@ -434,7 +434,7 @@ class Reference_Surface(object):
             draw_coordinate_system(l=self.real_world_size['x'])
             glPushMatrix()
             glScalef(self.real_world_size['x'],self.real_world_size['y'],1)
-            draw_gl_polyline([[0,0],[0,1],[1,1],[1,0]],color = RGBA(.5,.3,.1,.5),thickness=3)
+            draw_polyline([[0,0],[0,1],[1,1],[1,0]],color = RGBA(.5,.3,.1,.5),thickness=3)
             glPopMatrix()
             # Draw the world window as projected onto the plane using the homography mapping
             glPushMatrix()
@@ -444,23 +444,21 @@ class Reference_Surface(object):
             glMultMatrixf(m)
             glTranslatef(0,0,-.01)
             draw_named_texture(world_tex_id)
-            draw_gl_polyline([[0,0],[0,1],[1,1],[1,0]],color = RGBA(.5,.3,.6,.5),thickness=3)
+            draw_polyline([[0,0],[0,1],[1,1],[1,0]],color = RGBA(.5,.3,.6,.5),thickness=3)
             glPopMatrix()
 
             # Draw the camera frustum and origin using the 3d tranformation obtained from solvepnp
             glPushMatrix()
-            try:
-                glMultMatrixf(self.camera_pose_3d.T.flatten())
-                draw_frustum(self.img_size, K, 150)
-                glLineWidth(1)
-                draw_frustum(self.img_size, K, .1)
-                draw_coordinate_system(l=5)
-                print "kaikki kunnossa"
-                glPopMatrix()
-            except:
-                print "3d position uupui"
-                glPopMatrix()
+            glMultMatrixf(self.camera_pose_3d.T.flatten())
+            draw_frustum(self.img_size, K, 150)
+            glLineWidth(1)
+            draw_frustum(self.img_size, K, .1)
+            draw_coordinate_system(l=5)
+            glPopMatrix()
+
+
             self.trackball.pop()
+
             glfwSwapBuffers(self._window)
             glfwMakeContextCurrent(active_window)
         if self.window_should_close:

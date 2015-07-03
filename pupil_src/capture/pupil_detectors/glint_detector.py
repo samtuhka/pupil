@@ -16,7 +16,6 @@ from methods import *
 
 from c_methods import eye_filter
 from glfw import *
-from gl_utils import  draw_gl_texture,adjust_gl_view, clear_gl_screen, draw_gl_point_norm, draw_gl_polyline,basic_gl_setup,make_coord_system_norm_based,make_coord_system_pixel_based
 from template import Pupil_Detector
 
 # gui

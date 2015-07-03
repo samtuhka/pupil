@@ -9,7 +9,6 @@
 '''
 
 import sys, os, platform
-from time import sleep
 from ctypes import c_bool, c_double
 
 if platform.system() == 'Darwin':
@@ -22,22 +21,22 @@ if getattr(sys, 'frozen', False):
     # Specifiy user dirs.
     user_dir = os.path.expanduser(os.path.join('~','pupil_capture_settings'))
     version_file = os.path.join(sys._MEIPASS,'_version_string_')
-
-
 else:
-    # We are running in a normal Python environment.
     # Make all pupil shared_modules available to this Python session.
     pupil_base_dir = os.path.abspath(__file__).rsplit('pupil_src', 1)[0]
     sys.path.append(os.path.join(pupil_base_dir, 'pupil_src', 'shared_modules'))
 	# Specifiy user dir.
     user_dir = os.path.join(pupil_base_dir,'capture_settings')
     version_file = None
+    if __name__ == '__main__':
+        #compile all cython source files
+        from pyx_compiler import build_extensions
+        build_extensions()
 
 
 # create folder for user settings, tmp data
 if not os.path.isdir(user_dir):
     os.mkdir(user_dir)
-
 
 from version_utils import get_version
 
@@ -100,8 +99,8 @@ def main():
 
     # to use a pre-recorded video.
     # Use a string to specify the path to your video file as demonstrated below
-    # eye_src = '/Users/mkassner/Downloads/eye.avi' , '/Users/mkassner/Downloads/eye.avi'
-    # world_src = "/Users/mkassner/Desktop/2014_01_21/000/world.avi"
+    # eye_src = '/Users/mkassner/Downloads/000/eye0.mkv' , '/Users/mkassner/Downloads/eye.avi'
+    # world_src = "/Users/mkassner/Downloads/000/world.mkv"
 
     # Camera video size in pixels (width,height)
     eye_size = (640,480)
@@ -134,17 +133,14 @@ def main():
         p_eye += [Process(target=eye, args=(g_pool,eye_src[eye_id],eye_size,rx,eye_id))]
         g_pool.eye_tx += [tx]
         p_eye[-1].start()
-        if platform.system() == 'Linux':
-            # We need to give the camera driver some time before requesting another camera.
-            sleep(0.5)
 
-    world(g_pool,world_src,world_size)
-
-
+    p_world = Process(target=world,args=(g_pool,world_src,world_size))
+    # world(g_pool,world_src,world_size)
+    p_world.start()
+    p_world.join()
     # Exit / clean-up
     for p in p_eye:
         p.join()
-
 if __name__ == '__main__':
     freeze_support()
     main()
