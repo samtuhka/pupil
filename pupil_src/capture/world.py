@@ -27,7 +27,7 @@ from glfw import *
 from pyglui import ui,graph,cygl
 from pyglui.cygl.utils import create_named_texture,update_named_texture,draw_named_texture
 from gl_utils import basic_gl_setup,adjust_gl_view, clear_gl_screen,make_coord_system_pixel_based,make_coord_system_norm_based
-
+from time import time
 
 #check versions for our own depedencies as they are fast-changing
 from pyglui import __version__ as pyglui_version
@@ -151,7 +151,6 @@ def world(g_pool,cap_src,cap_size):
         logger.error("Could not retrieve image from capture")
         cap.close()
         return
-
 
     # any object we attach to the g_pool object *from now on* will only be visible to this process!
     # vars should be declared here to make them visible to the code reader.
@@ -300,7 +299,7 @@ def world(g_pool,cap_src,cap_size):
         except EndofVideoFileError:
             logger.warning("Video file is done. Stopping")
             break
-
+        tNonMono = time()
         #update performace graphs
         t = frame.timestamp
         dt,ts = t-ts,t
@@ -313,7 +312,7 @@ def world(g_pool,cap_src,cap_size):
 
         #a dictionary that allows plugins to post and read events
         events = {}
-
+        events['timestamp_nonMono'] = tNonMono
         #receive and map pupil positions
         recent_pupil_positions = []
         while not g_pool.pupil_queue.empty():

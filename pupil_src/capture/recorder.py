@@ -253,11 +253,10 @@ class Recorder(Plugin):
             for g in events.get('gaze_positions',[]):
                 gaze_pos = g['timestamp'],g['confidence'],g['norm_pos'][0],g['norm_pos'][1]
                 self.gaze_list.append(gaze_pos)
-
             for glint in events['glint_positions']:
                 self.glint_list += glint
             self.timestamps.append(frame.timestamp)
-            self.timestampsNonMono.append(time())
+            self.timestampsNonMono.append(events['timestamp_nonMono'])
             self.writer.write(frame.img)
             self.frame_count += 1
 
