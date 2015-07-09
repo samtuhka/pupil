@@ -303,7 +303,7 @@ class Recorder(Plugin):
 
         self.glint_pos_list = np.array(self.glint_pos_list)
         glint_list_path = os.path.join(self.rec_path, "glint_positions.npy")
-        np.save(glint_list_path,self.glint_pos_list[:,[0,3,4]])
+        np.save(glint_list_path,self.glint_pos_list)
 
         timestamps_path = os.path.join(self.rec_path, "world_timestamps.npy")
         ts = sanitize_timestamps(np.array(self.timestamps))
