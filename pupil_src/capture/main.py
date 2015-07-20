@@ -11,11 +11,14 @@
 import sys, os, platform
 from ctypes import c_bool, c_double
 
+forking_enable = lambda _: _ #dummy fn
+
 if platform.system() == 'Darwin':
-    from billiard import Process, Pipe, Queue, Value, freeze_support, forking_enable
+    from billiard import Process, Pipe, Queue, Value, freeze_support
+    if getattr(sys, 'frozen', False):
+        from billiard import forking_enable
 else:
     from multiprocessing import Process, Pipe, Queue, Value, freeze_support
-    forking_enable = lambda _: _ #dummy fn
 
 if getattr(sys, 'frozen', False):
     # Specifiy user dirs.
@@ -134,10 +137,8 @@ def main():
         g_pool.eye_tx += [tx]
         p_eye[-1].start()
 
-    p_world = Process(target=world,args=(g_pool,world_src,world_size))
-    # world(g_pool,world_src,world_size)
-    p_world.start()
-    p_world.join()
+    world(g_pool,world_src,world_size)
+
     # Exit / clean-up
     for p in p_eye:
         p.join()

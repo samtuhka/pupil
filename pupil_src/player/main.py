@@ -9,10 +9,12 @@
 '''
 
 import sys, os,platform
-from time import time, sleep
+from glob import glob
 from copy import deepcopy
-
-from multiprocessing import freeze_support
+try:
+    from billiard import freeze_support
+except:
+    from multiprocessing import freeze_support
 
 if getattr(sys, 'frozen', False):
     user_dir = os.path.expanduser(os.path.join('~','pupil_player_settings'))
@@ -39,8 +41,15 @@ if not os.path.isdir(user_dir):
 import logging
 #set up root logger before other imports
 logger = logging.getLogger()
-
-fh = logging.FileHandler(os.path.join(user_dir,'player.log'),mode='w')
+logger.setLevel(logging.WARNING) # <-- use this to set verbosity
+#since we are not using OS.fork on MacOS we need to do a few extra things to log our exports correctly.
+if platform.system() == 'Darwin':
+    if __name__ == '__main__': #clear log if main
+        fh = logging.FileHandler(os.path.join(user_dir,'player.log'),mode='w')
+    #we will use append mode since the exporter will stream into the same file when using os.span processes
+    fh = logging.FileHandler(os.path.join(user_dir,'player.log'),mode='a')
+else:
+    fh = logging.FileHandler(os.path.join(user_dir,'player.log'),mode='w')
 fh.setLevel(logging.DEBUG)
 # create console handler with a higher log level
 ch = logging.StreamHandler()
@@ -164,16 +173,14 @@ def session(rec_dir):
                 logger.error("'%s' is not a valid pupil recording"%new_rec_dir)
 
 
+    video_path = glob(os.path.join(rec_dir,"world.*"))[0]
+    timestamps_path = os.path.join(rec_dir, "world_timestamps.npy")
+    pupil_data_path = os.path.join(rec_dir, "pupil_data")
 
     #parse info.csv file
     meta_info_path = os.path.join(rec_dir,"info.csv")
     with open(meta_info_path) as info:
         meta_info = dict( ((line.strip().split('\t')) for line in info.readlines() ) )
-
-    video_path = os.path.join(rec_dir,"world.mkv")
-    timestamps_path = os.path.join(rec_dir, "world_timestamps.npy")
-    pupil_data_path = os.path.join(rec_dir, "pupil_data")
-
 
     rec_version = read_rec_version(meta_info)
     if rec_version >= VersionFormat('0.5'):
@@ -182,8 +189,8 @@ def session(rec_dir):
         update_recording_0v4_to_current(rec_dir)
     elif rec_version >= VersionFormat('0.3'):
         update_recording_0v3_to_current(rec_dir)
-        video_path = os.path.join(rec_dir,"world.avi")
         timestamps_path = os.path.join(rec_dir, "timestamps.npy")
+
     else:
         logger.Error("This recording is to old. Sorry.")
         return
@@ -207,17 +214,6 @@ def session(rec_dir):
     glfwSetWindowPos(main_window,window_pos[0],window_pos[1])
     glfwMakeContextCurrent(main_window)
     cygl.utils.init()
-
-
-    # Register callbacks main_window
-    glfwSetFramebufferSizeCallback(main_window,on_resize)
-    glfwSetKeyCallback(main_window,on_key)
-    glfwSetCharCallback(main_window,on_char)
-    glfwSetMouseButtonCallback(main_window,on_button)
-    glfwSetCursorPosCallback(main_window,on_pos)
-    glfwSetScrollCallback(main_window,on_scroll)
-    glfwSetDropCallback(main_window,on_drop)
-
 
     # load pupil_positions, gaze_positions
     pupil_data = load_object(pupil_data_path)
@@ -276,23 +272,19 @@ def session(rec_dir):
     g_pool.main_menu = ui.Growing_Menu("Settings",pos=(-350,20),size=(300,400))
     g_pool.main_menu.append(ui.Button("quit",lambda: on_close(None)))
     g_pool.main_menu.append(ui.Slider('scale',g_pool.gui, setter=set_scale,step = .05,min=0.75,max=2.5,label='Interface Size'))
-
     g_pool.main_menu.append(ui.Info_Text('Player Version: %s'%g_pool.version))
     g_pool.main_menu.append(ui.Info_Text('Recording Version: %s'%rec_version))
-
     g_pool.main_menu.append(ui.Selector('Open plugin', selection = user_launchable_plugins,
                                         labels = [p.__name__.replace('_',' ') for p in user_launchable_plugins],
                                         setter= open_plugin, getter = lambda: "Select to load"))
     g_pool.main_menu.append(ui.Button('Close all plugins',purge_plugins))
     g_pool.main_menu.append(ui.Button('Reset window size',lambda: glfwSetWindowSize(main_window,cap.frame_size[0],cap.frame_size[1])) )
-
     g_pool.quickbar = ui.Stretching_Menu('Quick Bar',(0,100),(120,-100))
     g_pool.play_button = ui.Thumb('play',g_pool,label='Play',hotkey=GLFW_KEY_SPACE)
     g_pool.play_button.on_color[:] = (0,1.,.0,.8)
     g_pool.forward_button = ui.Thumb('forward',getter = lambda: False,setter= next_frame, hotkey=GLFW_KEY_RIGHT)
     g_pool.backward_button = ui.Thumb('backward',getter = lambda: False, setter = prev_frame, hotkey=GLFW_KEY_LEFT)
     g_pool.quickbar.extend([g_pool.play_button,g_pool.forward_button,g_pool.backward_button])
-
     g_pool.gui.append(g_pool.quickbar)
     g_pool.gui.append(g_pool.main_menu)
 
@@ -308,11 +300,19 @@ def session(rec_dir):
             g_pool.trim_marks = p
             break
 
-    g_pool.gui.configuration = session_settings.get('ui_config',{})
 
+    # Register callbacks main_window
+    glfwSetFramebufferSizeCallback(main_window,on_resize)
+    glfwSetKeyCallback(main_window,on_key)
+    glfwSetCharCallback(main_window,on_char)
+    glfwSetMouseButtonCallback(main_window,on_button)
+    glfwSetCursorPosCallback(main_window,on_pos)
+    glfwSetScrollCallback(main_window,on_scroll)
+    glfwSetDropCallback(main_window,on_drop)
     #trigger on_resize
     on_resize(main_window, *glfwGetFramebufferSize(main_window))
 
+    g_pool.gui.configuration = session_settings.get('ui_config',{})
 
     # gl_state settings
     basic_gl_setup()
@@ -343,17 +343,12 @@ def session(rec_dir):
 
         #grab new frame
         if g_pool.play or g_pool.new_seek:
+            g_pool.new_seek = False
             try:
-                new_frame = cap.get_frame()
+                new_frame = cap.get_frame_nowait()
             except EndofVideoFileError:
                 #end of video logic: pause at last frame.
                 g_pool.play=False
-
-            if g_pool.new_seek:
-                display_time = new_frame.timestamp
-                g_pool.new_seek = False
-
-
             update_graph = True
         else:
             update_graph = False
@@ -405,14 +400,7 @@ def session(rec_dir):
         g_pool.gui.update()
 
         #present frames at appropriate speed
-        wait_time = frame.timestamp - display_time
-        display_time = frame.timestamp
-        try:
-            spent_time = time()-timestamp
-            sleep(wait_time-spent_time)
-        except:
-            pass
-        timestamp = time()
+        cap.wait(frame)
 
         glfwSwapBuffers(main_window)
         glfwPollEvents()
@@ -475,9 +463,9 @@ def show_no_rec_window():
     glfont.set_color_float((0.2,0.2,0.2,0.9))
     basic_gl_setup()
     glClearColor(0.5,.5,0.5,0.0)
-    text = 'Drop a recoding directory onto this window.'
+    text = 'Drop a recording directory onto this window.'
     tip = '(Tip: You can drop a recording directory onto the app icon.)'
-    # text = "Please supply a Pupil recoding directory as first arg when calling Pupil Player."
+    # text = "Please supply a Pupil recording directory as first arg when calling Pupil Player."
     while not glfwWindowShouldClose(window):
         clear_gl_screen()
         glfont.set_blur(10.5)
@@ -509,7 +497,7 @@ if __name__ == '__main__':
         rec_dir = os.path.expanduser(sys.argv[1])
     except:
         #for dev, supply hardcoded dir:
-        rec_dir = '/Users/mkassner/Desktop/Marker_Tracking_Demo_Recordings'
+        rec_dir = '/Users/mkassner/Desktop/Marker_Tracking_Demo_Recording'
         if os.path.isdir(rec_dir):
             logger.debug("Dev option: Using hardcoded data dir.")
         else:

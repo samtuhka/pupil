@@ -180,10 +180,10 @@ class AV_Writer(object):
 
 class JPEG_Writer(object):
     """
-    Does not work yet.
+    PyAV based jpeg writer.
     """
 
-    def __init__(self, file_loc):
+    def __init__(self, file_loc,fps=30):
         super(JPEG_Writer, self).__init__()
 
         try:
@@ -192,21 +192,17 @@ class JPEG_Writer(object):
             logger.error("'%s' is not a valid media file name."%file_loc)
             raise Exception("Error")
 
-        if ext not in ('mp4,mov,mkv'):
-            logger.warning("media file container should be mp4 or mov. Using a different container is risky.")
+        if ext not in ('mp4'):
+            logger.warning("media file container should be mp4. Using a different container is risky.")
 
         self.file_loc = file_loc
         self.container = av.open(self.file_loc,'w')
         logger.debug("Opended '%s' for writing."%self.file_loc)
 
-
-
-        self.video_stream = self.container.add_stream('mjpeg',1000)
-        self.video_stream.pix_fmt = "yuv422p"
-        print self.video_stream
-        print self.container
+        self.video_stream = self.container.add_stream('mjpeg',int(10000*fps))
+        self.video_stream.pix_fmt = "yuvj422p"
         self.configured = False
-
+        self.frame_count = 0
 
     def write_video_frame(self, input_frame):
         if not self.configured:
@@ -215,17 +211,23 @@ class JPEG_Writer(object):
             self.configured = True
 
         packet = Packet()
-        packet.payload = input_frame.jpeg_buffer.view()
+        packet.payload = input_frame.jpeg_buffer
+        packet.dts = self.frame_count*10000
+        packet.pts = self.frame_count*10000
+        self.frame_count +=1
         self.container.mux(packet)
 
 
     def close(self):
-
         self.container.close()
         logger.debug("Closed media container")
 
     def release(self):
         self.close()
+
+
+
+
 
 
 class JPEG_Dumper(object):
@@ -250,29 +252,27 @@ class JPEG_Dumper(object):
 
     def release(self):
         self.file_handle.close()
-        try:
-            sp.Popen('ffmpeg',stdout=open(os.devnull, 'wb'),stderr=open(os.devnull, 'wb'))
-        except OSError:
-            logger.error("Please install ffmpeg to enable pupil capture to convert raw jpeg streams to a readable format.")
-        else:
+        cmd_bin = ffmpeg_bin()
+        if cmd_bin:
             # ffmpeg  -f mjpeg -i world.raw -vcodec copy world.mkv
-            sp.call(['ffmpeg -f mjpeg -i '+self.raw_path +' -vcodec copy '+self.out_path],shell=True)
+            sp.Popen([cmd_bin+' -f mjpeg -i '+self.raw_path +' -vcodec copy '+self.out_path + '&& rm '+ self.raw_path],shell=True)
             #this should be done programatically but requires a better video backend.
-            sp.Popen(["rm "+ self.raw_path],shell=True)
 
 
-def ffmpeg_available():
-    import platform
-    if platform.system() == 'Darwin' and getattr(sys, 'frozen', False):
-        return False
+def ffmpeg_bin():
     try:
         sp.Popen('ffmpeg',stdout=open(os.devnull, 'wb'),stderr=open(os.devnull, 'wb'))
     except OSError:
-        logger.error("Please install ffmpeg to enable pupil capture to capture raw jpeg streams as a readable format.")
-        return False
+        pass
     else:
-        return True
-
+        return 'ffmpeg'
+    try:
+        sp.Popen('avconv',stdout=open(os.devnull, 'wb'),stderr=open(os.devnull, 'wb'))
+    except OSError:
+        logger.error("Please install ffmpeg or libav-tools to enable pupil capture to record raw jpeg streams as a readable format.")
+        return None
+    else:
+        return 'avconv'
 
 def test():
 
@@ -298,14 +298,76 @@ def test():
     writer.close()
 
 
-
-
 if __name__ == '__main__':
 
-    import cProfile,subprocess,os
-    cProfile.runctx("test()",{},locals(),"av_writer.pstats")
-    loc = os.path.abspath(__file__).rsplit('pupil_src', 1)
-    gprof2dot_loc = os.path.join(loc[0], 'pupil_src', 'shared_modules','gprof2dot.py')
-    subprocess.call("python "+gprof2dot_loc+" -f pstats av_writer.pstats | dot -Tpng -o av_writer.png", shell=True)
-    print "created cpu time graph for av_writer process. Please check out the png next to the av_writer.py file"
+    logging.basicConfig(level=logging.DEBUG)
+
+    #mic device
+
+    def format_time(time, time_base):
+        if time is None:
+            return 'None'
+        return '%.3fs (%s or %s/%s)' % (time_base * time, time_base * time, time_base.numerator * time, time_base.denominator)
+
+
+    container = av.open(':0',format="avfoundation")
+    print 'container:', container
+    print '\tformat:', container.format
+    print '\tduration:', float(container.duration) / av.time_base
+    print '\tmetadata:'
+    for k, v in sorted(container.metadata.iteritems()):
+        print '\t\t%s: %r' % (k, v)
+    print
+
+    print len(container.streams), 'stream(s):'
+    for i, stream in enumerate(container.streams):
+
+        print '\t%r' % stream
+        print '\t\ttime_base: %r' % stream.time_base
+        print '\t\trate: %r' % stream.rate
+        print '\t\tstart_time: %r' % stream.start_time
+        print '\t\tduration: %s' % format_time(stream.duration, stream.time_base)
+        print '\t\tbit_rate: %r' % stream.bit_rate
+        print '\t\tbit_rate_tolerance: %r' % stream.bit_rate_tolerance
+
+        if stream.type == b'audio':
+            print '\t\taudio:'
+            print '\t\t\tformat:', stream.format
+            print '\t\t\tchannels: %s' % stream.channels
+
+        elif stream.type == 'container':
+            print '\t\tcontainer:'
+            print '\t\t\tformat:', stream.format
+            print '\t\t\taverage_rate: %r' % stream.average_rate
+
+        print '\t\tmetadata:'
+        for k, v in sorted(stream.metadata.iteritems()):
+            print '\t\t\t%s: %r' % (k, v)
+
+
+    #file contianer:
+
+    out_container = av.open('test.wav','w')
+    out_stream = out_container.add_stream('pcm_f32le')
+    # out_stream.rate = 44100
+    for i,packet in enumerate(container.demux(container.streams[0])):
+        # for frame in packet.decode():
+        #     packet = out_stream.encode(frame)
+        #     if packet:
+        # print '%r' %packet
+        # print '\tduration: %s' % format_time(packet.duration, packet.stream.time_base)
+        # print '\tpts: %s' % format_time(packet.pts, packet.stream.time_base)
+        # print '\tdts: %s' % format_time(packet.dts, packet.stream.time_base)
+        out_container.mux(packet)
+        if i >1000:
+            break
+
+    out_container.close()
+
+    # import cProfile,subprocess,os
+    # cProfile.runctx("test()",{},locals(),"av_writer.pstats")
+    # loc = os.path.abspath(_file__).rsplit('pupil_src', 1)
+    # gprof2dot_loc = os.path.oin(loc[0], 'pupil_src', 'shared_modules','gprof2dot.py')
+    # subprocess.call("python "+gprof2dot_loc+" -f pstats av_writer.pstats | dot -Tpng -o av_writer.png", shell=True)
+    # print "created cpu time graph for av_writer process. Please check out the png next to the av_writer.py file"
 
