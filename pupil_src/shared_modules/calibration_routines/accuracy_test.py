@@ -123,7 +123,10 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
             self.g_pool.quickbar.remove(self.button)
             self.button = None
 
-
+    def changeSitesCloseToWheel(self):
+        for i in range(len(self.sites)):
+            if self.sites[i][0]>0.25 and self.sites[i][0]<0.75 and self.sites[i][1]< 0.3:
+                self.sites[i] =  self.sites[i][0], 0.3
 
     def start(self):
         audio.say("Starting Accuracy Test")
@@ -131,9 +134,10 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
         self.sites = [  (.5, .5), (0,.5),
                         (0.,1),(.5,1),(1.,1.),
                         (1,.5),
-                        (1., 0),(.5, .25),(0,0.),
+                        (1., 0),(.5, .3),(0,0.),
                         (.5,.5),(.5,.5)]
         self.sites = np.random.random((10,2)).tolist() + self.sites
+        self.changeSitesCloseToWheel()
         self.active_site = 0
         self.active = True
         self.ref_list = []
