@@ -169,9 +169,9 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         audio.say("Starting Calibration")
         logger.info("Starting Calibration")
         self.sites = [  (.25, .5), (0,.5),
-                        (0.,1.),(.5,.25),(1.,1.),
+                        (0.,1.),(.5,.30),(1.,1.),
                         (1.,.5),
-                        (1., 0.),(.5, .25),(0.,0.),
+                        (1., 0.),(.5, .30),(0.,0.),
                         (.75,.5)]
 
         self.calGlint = self.g_pool.calGlint
