@@ -328,12 +328,19 @@ class Recorder(Plugin):
             logger.warning("No pupil-glint-vector calibration data found. Please calibrate first.")
 
         try:
+            copy2(os.path.join(self.g_pool.user_dir,"cal_ref_list.npy"),os.path.join(self.rec_path,"cal_ref_list.npy"))
+        except:
+            logger.warning("No calibration reference list found.")
+
+        try:
             copy2(os.path.join(self.g_pool.user_dir,"accuracy_test_pt_cloud.npy"),os.path.join(self.rec_path,"accuracy_test_pt_cloud.npy"))
+            copy2(os.path.join(self.g_pool.user_dir,"accuracy_test_ref_list.npy"),os.path.join(self.rec_path,"accuracy_test_ref_list.npy"))
         except:
             logger.warning("No accuracy test found.")
 
         try:
             copy2(os.path.join(self.g_pool.user_dir,"accuracy_test_pt_cloud_previous.npy"),os.path.join(self.rec_path,"accuracy_test_pt_cloud_previous.npy"))
+            copy2(os.path.join(self.g_pool.user_dir,"accuracy_test_ref_list_previous.npy"),os.path.join(self.rec_path,"accuracy_test_ref_list_previous.npy"))
         except:
             logger.warning("No previous accuracy test results.")
 

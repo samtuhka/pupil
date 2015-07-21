@@ -169,9 +169,9 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         audio.say("Starting Calibration")
         logger.info("Starting Calibration")
         self.sites = [  (.25, .5), (0,.5),
-                        (0.,1.),(.5,.3),(1.,1.),
+                        (0.,1.),(.5,.25),(1.,1.),
                         (1.,.5),
-                        (1., 0.),(.5, .3),(0.,0.),
+                        (1., 0.),(.5, .25),(0.,0.),
                         (.75,.5)]
 
         self.calGlint = self.g_pool.calGlint
@@ -256,10 +256,11 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         #replace current gaze mapper with new
         self.g_pool.plugins.add(Simple_Gaze_Mapper(self.g_pool,params))
 
-
+        refList = np.array(self.ref_list)
         cal_pt_cloud_glint = np.array(cal_pt_cloud_glint)
         map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint,self.world_size,return_params=True)
         np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud_glint.npy'),cal_pt_cloud_glint)
+        np.save(os.path.join(self.g_pool.user_dir,'cal_ref_list.npy'),refList)
 
         if self.calGlint:
             self.g_pool.plugins.add(Glint_Gaze_Mapper(self.g_pool, params2))

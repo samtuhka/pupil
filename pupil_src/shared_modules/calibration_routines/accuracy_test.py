@@ -125,8 +125,8 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
 
     def changeSitesCloseToWheel(self):
         for i in range(len(self.sites)):
-            if self.sites[i][0]>0.25 and self.sites[i][0]<0.75 and self.sites[i][1]< 0.3:
-                self.sites[i] =  self.sites[i][0], 0.3
+            if self.sites[i][0]>0.25 and self.sites[i][0]<0.75 and self.sites[i][1]< 0.25:
+                self.sites[i] =  self.sites[i][0], 0.25
 
     def start(self):
         audio.say("Starting Accuracy Test")
@@ -134,7 +134,7 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
         self.sites = [  (.5, .5), (0,.5),
                         (0.,1),(.5,1),(1.,1.),
                         (1,.5),
-                        (1., 0),(.5, .3),(0,0.),
+                        (1., 0),(.5, .25),(0,0.),
                         (.5,.5),(.5,.5)]
         self.sites = np.random.random((10,2)).tolist() + self.sites
         self.changeSitesCloseToWheel()
@@ -171,11 +171,13 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
 
         try:
             copy2(os.path.join(self.g_pool.user_dir,"accuracy_test_pt_cloud.npy"),os.path.join(self.g_pool.user_dir,"accuracy_test_pt_cloud_previous.npy"))
+            copy2(os.path.join(self.g_pool.user_dir,"accuracy_test_ref_list.npy"),os.path.join(self.g_pool.user_dir,"accuracy_test_ref_list_previous.npy"))
         except:
             logger.warning("No previous accuracy test results.")
-
+        refList = np.array(self.ref_list)
         pt_cloud = np.array(pt_cloud)
         np.save(os.path.join(self.g_pool.user_dir,'accuracy_test_pt_cloud.npy'),pt_cloud)
+        np.save(os.path.join(self.g_pool.user_dir,'accuracy_test_ref_list.npy'),refList)
         gaze,ref = pt_cloud[:,0:2],pt_cloud[:,2:4]
         error_lines = np.array([[g,r] for g,r in zip(gaze,ref)])
         self.error_lines = error_lines.reshape(-1,2)
