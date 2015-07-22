@@ -148,7 +148,8 @@ class Natural_Features_Calibration(Calibration_Plugin):
                     self.pupil_list.append(p_pt)
 
             for g_p_pt in recent_glint_pupil_positions:
-                self.glint_pupil_list.append(g_p_pt)
+                if g_p_pt['glint_found']:
+                    self.glint_pupil_list.append(g_p_pt)
 
 
             if self.count:

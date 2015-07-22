@@ -271,7 +271,10 @@ class Recorder(Plugin):
                 self.pupil_pos_list.append(pupil_pos)
 
             for g in events.get('gaze_positions',[]):
-                gaze_pos = g['timestamp'],g['confidence'],g['norm_pos'][0],g['norm_pos'][1]
+                try:
+                    gaze_pos = g['timestamp'],g['confidence'],g['norm_pos'][0],g['norm_pos'][1], g['foundGlint']
+                except:
+                    gaze_pos = g['timestamp'],g['confidence'],g['norm_pos'][0],g['norm_pos'][1], 0
                 self.gaze_pos_list.append(gaze_pos)
             for glint in events['glint_positions']:
                 self.glint_pos_list += glint

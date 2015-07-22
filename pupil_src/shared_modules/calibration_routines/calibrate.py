@@ -219,6 +219,34 @@ def preprocess_data_glint(glint_pupil_pts, ref_pts):
             break
     return cal_data
 
+def interpol_params(cal_data):
+    rlmX = sm.RLM(cal_data[:,3], cal_data[:,:3]).fit()
+    rlmY = sm.RLM(cal_data[:,4], cal_data[:,:3]).fit()
+    cx = rlmX.params
+    cy = rlmY.params
+    return (cx, cy, 3)
+
+def preprocess_data_interpol(pupil_glint_pts, glint_pts):
+    cal_data =[]
+    if len(glint_pts)<=100:
+        return cal_data
+    pupil = []
+    for i in range(len(glint_pts)):
+        x = pupil_glint_pts[i]['x'] + glint_pts[i][3]
+        y = pupil_glint_pts[i]['y'] + glint_pts[i][4]
+        pt = x, y
+        pupil.append(pt)
+    pupil = np.array(pupil)
+    glint = np.array(glint_pts)
+    n_points = pupil.shape[0]
+    X=pupil[:,0]
+    Y=pupil[:,1]
+    Ones=np.ones(n_points)
+    ZX=glint[:,3]
+    ZY=glint[:,4]
+    cal_data=np.array([X,Y, Ones,ZX,ZY]).transpose()
+    return cal_data
+
 # if __name__ == '__main__':
 #     import matplotlib.pyplot as plt
 #     from matplotlib import cm

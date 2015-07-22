@@ -330,8 +330,10 @@ def eye(g_pool,cap_src,cap_size,rx_from_world,eye_id=0):
 
         #save glint-pupil vector results
         if glints[0][3]:
-            glint_pupil_vector = {'timestamp': glints[0][0], 'x': result['norm_pos'][0]-glints[0][3], 'y': result['norm_pos'][1]-glints[0][4], 'pupil_confidence': result['confidence']}
-            g_pool.glint_pupil_vectors.put(glint_pupil_vector)
+            glint_pupil_vector = {'timestamp': glints[0][0], 'x': result['norm_pos'][0]-glints[0][3], 'y': result['norm_pos'][1]-glints[0][4], 'pupil_confidence': result['confidence'], 'glint_found': True}
+        else:
+             glint_pupil_vector = {'timestamp': glints[0][0], 'x': result['norm_pos'][0]-glints[0][3], 'y': result['norm_pos'][1]-glints[0][4], 'pupil_confidence': result['confidence'], 'glint_found': False}
+        g_pool.glint_pupil_vectors.put(glint_pupil_vector)
 
         # GL drawing
         glfwMakeContextCurrent(main_window)

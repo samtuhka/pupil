@@ -94,11 +94,12 @@ class Bilateral_Gaze_Mapper(Gaze_Mapping_Plugin):
 
 class Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
     """docstring for Simple_Gaze_Mapper"""
-    def __init__(self, g_pool, params):
+    def __init__(self, g_pool, params, interpol_params):
         super(Glint_Gaze_Mapper, self).__init__(g_pool)
         self.params = params
         self.map_fn = make_map_function(*params)
-
+        self.interpol_params = interpol_params
+        self.interpol_map = make_map_function(*interpol_params)
 
 
     def update(self,frame,events):
@@ -115,10 +116,14 @@ class Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
         gaze_pts = []
         for g in events['glint_pupil_vectors']:
             if g['pupil_confidence'] > self.g_pool.pupil_confidence_threshold:
-                v = g['x'], g['y']
+                if g['glint_found']:
+                    v = g['x'], g['y']
+                else:
+                    v = self.interpol_map((g['x'], g['y']))
+                    v = g['x'] - v[0], g['y'] - v[1]
                 gaze_glint_point = self.map_fn(v)
-                gaze_pts.append({'norm_pos':gaze_glint_point,'confidence':g['pupil_confidence'],'timestamp':g['timestamp']})
+                gaze_pts.append({'norm_pos':gaze_glint_point,'confidence':g['pupil_confidence'],'timestamp':g['timestamp'], 'foundGlint': g['glint_found']})
         events['gaze_positions'] = gaze_pts
 
     def get_init_dict(self):
-        return {'params':self.params}
+        return {'params':self.params, 'interpol_params': self.interpol_params}
