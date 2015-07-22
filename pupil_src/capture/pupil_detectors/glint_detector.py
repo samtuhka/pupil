@@ -122,8 +122,8 @@ class Glint_Detector(object):
 
     def init_gui(self,sidebar):
         self.menu = ui.Growing_Menu('Glint  Detector')
-        self.menu.append(ui.Slider('glint_dist',self,label='Distance from pupil',min=0,max=5,step=0.5))
-        self.menu.append(ui.Slider('glint_thres',self,label='Intensity threshold',min=0,max=255,step=1))
+        self.menu.append(ui.Slider('glint_dist',self,label='Distance from pupil',min=0,max=5,step=0.25))
+        self.menu.append(ui.Slider('glint_thres',self,label='Intensity threshold',min=0,max=255,step=5))
         self.menu.append(ui.Slider('glint_min',self,label='Min size',min=1,max=100,step=1))
         self.menu.append(ui.Slider('glint_max',self,label='Max size',min=50,max=500,step=1))
         sidebar.append(self.menu)
