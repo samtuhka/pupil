@@ -279,6 +279,7 @@ def world(g_pool,cap_src,cap_size):
 
         # Get an image from the grabber
         try:
+            tUnix = time()
             frame = cap.get_frame()
         except CameraCaptureError:
             logger.error("Capture from camera failed. Stopping.")
@@ -286,7 +287,6 @@ def world(g_pool,cap_src,cap_size):
         except EndofVideoFileError:
             logger.warning("Video file is done. Stopping")
             break
-        tNonMono = time()
         #update performace graphs
         t = frame.timestamp
         dt,ts = t-ts,t
@@ -300,7 +300,7 @@ def world(g_pool,cap_src,cap_size):
 
         #a dictionary that allows plugins to post and read events
         events = {}
-        events['timestamp_nonMono'] = tNonMono
+        events['timestamp_unix'] = tUnix
         #receive and map pupil positions
         recent_pupil_positions = []
         while not g_pool.pupil_queue.empty():

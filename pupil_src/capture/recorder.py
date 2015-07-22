@@ -171,7 +171,7 @@ class Recorder(Plugin):
 
     def start(self):
         self.timestamps = []
-        self.timestampsNonMono = []
+        self.timestampsUnix = []
         self.glint_pos_list = []
         self.data = {'pupil_positions':[],'gaze_positions':[]}
         self.pupil_pos_list = []
@@ -278,7 +278,7 @@ class Recorder(Plugin):
                 self.gaze_pos_list.append(gaze_pos)
             for glint in events['glint_positions']:
                 self.glint_pos_list += glint
-            self.timestampsNonMono.append(events['timestamp_nonMono'])
+            self.timestampsUnix.append(events['timestamp_unix'])
 
             self.button.status_text = self.get_rec_time_str()
 
@@ -310,9 +310,9 @@ class Recorder(Plugin):
         ts = sanitize_timestamps(np.array(self.timestamps))
         np.save(timestamps_path,ts)
 
-        timestampsNonMono_path = os.path.join(self.rec_path, "world_timestampsNonMono.npy")
-        tsNonMono = np.array(self.timestampsNonMono)
-        np.save(timestampsNonMono_path,tsNonMono)
+        timestampsUnix_path = os.path.join(self.rec_path, "world_timestamps_unix.npy")
+        tsUnix = np.array(self.timestampsUnix)
+        np.save(timestampsUnix_path,tsUnix)
 
 
         try:
