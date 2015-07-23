@@ -220,6 +220,7 @@ def preprocess_data_glint(glint_pupil_pts, ref_pts):
     return cal_data
 
 def interpol_params(cal_data):
+    print cal_data
     rlmX = sm.RLM(cal_data[:,3], cal_data[:,:3]).fit()
     rlmY = sm.RLM(cal_data[:,4], cal_data[:,:3]).fit()
     cx = rlmX.params
@@ -228,7 +229,7 @@ def interpol_params(cal_data):
 
 def preprocess_data_interpol(pupil_glint_pts, glint_pts):
     cal_data =[]
-    if len(glint_pts)<=100:
+    if len(glint_pts)<=20:
         return cal_data
     pupil = []
     for i in range(len(glint_pts)):

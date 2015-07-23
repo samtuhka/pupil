@@ -100,6 +100,7 @@ class Manual_Marker_Calibration(Calibration_Plugin):
         self.active = True
         self.ref_list = []
         self.pupil_list = []
+        self.glint_list = []
         self.glint_pupil_list =[]
         self.calGlint = self.g_pool.calGlint
 
@@ -112,26 +113,35 @@ class Manual_Marker_Calibration(Calibration_Plugin):
         self.active = False
         self.button.status_text = ''
         print 'button:', self.button.status_text
-        ref_list = list(self.ref_list)
-        cal_pt_cloud_glint = calibrate.preprocess_data_glint(self.glint_pupil_list, ref_list)
+
+        ref_list_copy = list(self.ref_list)
+        glint_pupil_list_copy = list(self.glint_pupil_list)
+        cal_pt_cloud_glint = calibrate.preprocess_data_glint(self.glint_pupil_list, ref_list_copy)
         cal_pt_cloud = calibrate.preprocess_data(self.pupil_list,self.ref_list)
+        cal_interpol = calibrate.preprocess_data_interpol(glint_pupil_list_copy, self.glint_list)
+
         logger.info("Collected %s data points." %len(cal_pt_cloud))
         if len(cal_pt_cloud) < 20:
             logger.warning("Did not collect enough data.")
             return
+        if self.calGlint and len(cal_pt_cloud_glint) < 20:
+            self.calGlint = False
+            logger.warning("Did not collect enough data on glint. Calibrating without glint.")
+
         cal_pt_cloud = np.array(cal_pt_cloud)
         map_fn,params = calibrate.get_map_from_cloud(cal_pt_cloud,self.world_size,return_params=True)
         np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud.npy'),cal_pt_cloud)
 
 
         cal_pt_cloud_glint = np.array(cal_pt_cloud_glint)
-        map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint,self.world_size,return_params=True)
         np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud_glint.npy'),cal_pt_cloud_glint)
 
         self.g_pool.plugins.add(Simple_Gaze_Mapper(self.g_pool,params))
 
         if self.calGlint:
-            self.g_pool.plugins.add(Glint_Gaze_Mapper(self.g_pool, params2))
+            map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint,self.world_size,return_params=True)
+            interpol_params = calibrate.interpol_params(cal_interpol)
+            self.g_pool.plugins.add(Glint_Gaze_Mapper(self.g_pool, params2, interpol_params))
 
     def update(self,frame,events):
         """
@@ -142,6 +152,7 @@ class Manual_Marker_Calibration(Calibration_Plugin):
         if self.active:
             recent_pupil_positions = events['pupil_positions']
             recent_glint_pupil_positions = events['glint_pupil_vectors']
+            recent_glint_positions = events['glint_positions']
             gray_img  = frame.gray
 
             if self.world_size is None:
@@ -233,6 +244,10 @@ class Manual_Marker_Calibration(Calibration_Plugin):
             for p_pt in recent_pupil_positions:
                 if p_pt['confidence'] > self.g_pool.pupil_confidence_threshold:
                     self.pupil_list.append(p_pt)
+
+            for g_pt in recent_glint_positions:
+                if g_pt[0][3]:
+                    self.glint_list.append(g_pt[0])
 
             for g_p_pt in recent_glint_pupil_positions:
                  if g_p_pt['glint_found']:
