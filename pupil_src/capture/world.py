@@ -18,7 +18,6 @@ if __name__ == '__main__':
 
 
 import os, sys,platform
-from file_methods import Persistent_Dict
 import logging
 import numpy as np
 
@@ -31,37 +30,33 @@ from time import time
 
 #check versions for our own depedencies as they are fast-changing
 from pyglui import __version__ as pyglui_version
-assert pyglui_version >= '0.3'
+assert pyglui_version >= '0.5'
 
 #monitoring
 import psutil
 
 # helpers/utils
+from file_methods import Persistent_Dict
 from version_utils import VersionFormat
-from methods import normalize, denormalize
-from video_capture import autoCreateCapture, FileCaptureError, EndofVideoFileError, CameraCaptureError, FakeCapture
+from methods import normalize, denormalize, delta_t
+from video_capture import autoCreateCapture, FileCaptureError, EndofVideoFileError, CameraCaptureError
 
 
 # Plug-ins
-from plugin import Plugin_List
+from plugin import Plugin_List,import_runtime_plugins
 from calibration_routines import calibration_plugins, gaze_mapping_plugins
 from recorder import Recorder
 from show_calibration import Show_Calibration
 from display_recent_gaze import Display_Recent_Gaze
 from pupil_server import Pupil_Server
-from pupil_remote import Pupil_Remote
+from pupil_sync import Pupil_Sync
 from marker_detector import Marker_Detector
+from log_display import Log_Display
 
-#manage plugins
-user_launchable_plugins = [Show_Calibration,Pupil_Server,Pupil_Remote,Marker_Detector]
-system_plugins  = [Display_Recent_Gaze,Recorder]
-plugin_by_index =  user_launchable_plugins+system_plugins+calibration_plugins+gaze_mapping_plugins
-name_by_index = [p.__name__ for p in plugin_by_index]
-plugin_by_name = dict(zip(name_by_index,plugin_by_index))
-default_plugins = [('Dummy_Gaze_Mapper',{}),('Display_Recent_Gaze',{}), ('Screen_Marker_Calibration',{}),('Recorder',{})]
 
 # create logger for the context of this function
 logger = logging.getLogger(__name__)
+
 
 
 #UI Platform tweaks
@@ -83,6 +78,17 @@ def world(g_pool,cap_src,cap_size):
     Receives Pupil coordinates from eye process[es]
     Can run various plug-ins.
     """
+
+    #manage plugins
+    runtime_plugins = import_runtime_plugins(os.path.join(g_pool.user_dir,'plugins'))
+    user_launchable_plugins = [Show_Calibration,Pupil_Server,Pupil_Sync,Marker_Detector]+runtime_plugins
+    system_plugins  = [Log_Display,Display_Recent_Gaze,Recorder]
+    plugin_by_index =  system_plugins+user_launchable_plugins+calibration_plugins+gaze_mapping_plugins
+    name_by_index = [p.__name__ for p in plugin_by_index]
+    plugin_by_name = dict(zip(name_by_index,plugin_by_index))
+    default_plugins = [('Log_Display',{}),('Dummy_Gaze_Mapper',{}),('Display_Recent_Gaze',{}), ('Screen_Marker_Calibration',{}),('Recorder',{})]
+
+
 
     # Callback functions
     def on_resize(window,w, h):
@@ -126,6 +132,9 @@ def world(g_pool,cap_src,cap_size):
         logger.info('Process closing from window')
 
 
+    tick = delta_t()
+    def get_dt():
+        return next(tick)
 
     # load session persistent settings
     session_settings = Persistent_Dict(os.path.join(g_pool.user_dir,'user_settings_world'))
@@ -146,6 +155,7 @@ def world(g_pool,cap_src,cap_size):
         cap.close()
         return
 
+
     # any object we attach to the g_pool object *from now on* will only be visible to this process!
     # vars should be declared here to make them visible to the code reader.
     g_pool.update_textures = session_settings.get("update_textures",2)
@@ -157,28 +167,14 @@ def world(g_pool,cap_src,cap_size):
 
     g_pool.calGlint = session_settings.get('calibrate_glint', False)
 
-    #UI callback functions
-    def reset_timebase():
-        #the last frame from worldcam will be t0
-        g_pool.timebase.value = g_pool.capture.get_now()
-        logger.info("New timebase set to %s all timestamps will count from here now."%g_pool.timebase.value)
-
-    def set_calibration_plugin(new_calibration):
-        g_pool.active_calibration_plugin = new_calibration
-        new_plugin = new_calibration(g_pool)
-        g_pool.plugins.add(new_plugin)
-
     def open_plugin(plugin):
         if plugin ==  "Select to load":
             return
-        logger.debug('Open Plugin: %s'%plugin)
-        new_plugin = plugin(g_pool)
-        g_pool.plugins.add(new_plugin)
+        g_pool.plugins.add(plugin)
 
     def set_scale(new_scale):
         g_pool.gui.scale = new_scale
         g_pool.gui.collect_menus()
-
 
 
     #window and gl setup
@@ -204,13 +200,12 @@ def world(g_pool,cap_src,cap_size):
     advanced_settings = ui.Growing_Menu('Advanced')
     advanced_settings.append(ui.Selector('update_textures',g_pool,label="Update display",selection=range(3),labels=('No update','Gray','Color')))
     advanced_settings.append(ui.Slider('pupil_confidence_threshold', g_pool,step = .01,min=0.,max=1.,label='Minimum pupil confidence'))
-    advanced_settings.append(ui.Button('Set timebase to 0',reset_timebase))
     advanced_settings.append(ui.Info_Text('Capture Version: %s'%g_pool.version))
     general_settings.append(advanced_settings)
     g_pool.calibration_menu = ui.Growing_Menu('Calibration')
-    g_pool.calibration_menu.append(ui.Selector('active_calibration_plugin',g_pool, selection = calibration_plugins,
+    g_pool.calibration_menu.append(ui.Selector('active_calibration_plugin',getter=lambda: g_pool.active_calibration_plugin.__class__, selection = calibration_plugins,
                                         labels = [p.__name__.replace('_',' ') for p in calibration_plugins],
-                                        setter= set_calibration_plugin,label='Method'))
+                                        setter= open_plugin,label='Method'))
     g_pool.calibration_menu.append(ui.Switch('calGlint', g_pool,on_val=True,off_val=False,label='Calibrate with glint'))
     g_pool.sidebar.append(g_pool.calibration_menu)
     g_pool.gui.append(g_pool.sidebar)
@@ -220,13 +215,9 @@ def world(g_pool,cap_src,cap_size):
     g_pool.capture.init_gui(g_pool.sidebar)
 
     #plugins that are loaded based on user settings from previous session
+    g_pool.notifications = []
     g_pool.plugins = Plugin_List(g_pool,plugin_by_name,session_settings.get('loaded_plugins',default_plugins))
 
-    #only needed for the gui to show the loaded calibration type
-    for p in g_pool.plugins:
-        if p.base_class_name == 'Calibration_Plugin':
-            g_pool.active_calibration_plugin =  p.__class__
-            break
 
     # Register callbacks main_window
     glfwSetFramebufferSizeCallback(main_window,on_resize)
@@ -251,6 +242,7 @@ def world(g_pool,cap_src,cap_size):
 
     #now the we have  aproper window we can load the last gui configuration
     g_pool.gui.configuration = session_settings.get('ui_config',{})
+
 
 
     #set up performace graphs:
@@ -297,10 +289,13 @@ def world(g_pool,cap_src,cap_size):
         cpu_graph.update()
 
 
-
         #a dictionary that allows plugins to post and read events
         events = {}
         events['timestamp_unix'] = tUnix
+
+        #report time between now and the last loop interation
+        events['dt'] = get_dt()
+
         #receive and map pupil positions
         recent_pupil_positions = []
         while not g_pool.pupil_queue.empty():
@@ -321,6 +316,11 @@ def world(g_pool,cap_src,cap_size):
             v = g_pool.glint_pupil_vectors.get()
             recent_glint_pupil_vectors.append(v)
         events['glint_pupil_vectors'] = recent_glint_pupil_vectors
+        # notify each plugin if there are new notifactions:
+        while g_pool.notifications:
+            n = g_pool.notifications.pop(0)
+            for p in g_pool.plugins:
+                p.on_notify(n)
 
         # allow each Plugin to do its work.
         for p in g_pool.plugins:

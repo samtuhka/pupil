@@ -117,7 +117,7 @@ class Natural_Features_Calibration(Calibration_Plugin):
         np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud_glint.npy'),cal_pt_cloud_glint)
 
         #replace gaze mapper
-        self.g_pool.plugins.add(Simple_Gaze_Mapper(self.g_pool,params))
+        self.g_pool.plugins.add(Simple_Gaze_Mapper,args={'params':params})
 
         if self.calGlint:
             map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint,img_size,return_params=True)

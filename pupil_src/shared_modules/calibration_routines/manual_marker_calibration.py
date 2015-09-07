@@ -136,7 +136,7 @@ class Manual_Marker_Calibration(Calibration_Plugin):
         cal_pt_cloud_glint = np.array(cal_pt_cloud_glint)
         np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud_glint.npy'),cal_pt_cloud_glint)
 
-        self.g_pool.plugins.add(Simple_Gaze_Mapper(self.g_pool,params))
+        self.g_pool.plugins.add(Simple_Gaze_Mapper,args={'params':params})
 
         if self.calGlint:
             map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint,self.world_size,return_params=True)

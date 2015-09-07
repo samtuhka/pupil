@@ -25,7 +25,7 @@ from pyglui.cygl.utils import create_named_texture,update_named_texture,draw_nam
 
 # check versions for our own depedencies as they are fast-changing
 from pyglui import __version__ as pyglui_version
-assert pyglui_version >= '0.3'
+assert pyglui_version >= '0.5'
 
 #monitoring
 import psutil
@@ -47,7 +47,7 @@ from pupil_detectors import Canny_Detector
 from pupil_detectors import Glint_Detector
 
 
-def eye(g_pool,cap_src,cap_size,rx_from_world,eye_id=0):
+def eye(g_pool,cap_src,cap_size,pipe_to_world,eye_id=0):
     """
     Creates a window, gl context.
     Grabs images from a capture.
@@ -150,7 +150,7 @@ def eye(g_pool,cap_src,cap_size,rx_from_world,eye_id=0):
     # Initialize capture
     cap = autoCreateCapture(cap_src, timebase=g_pool.timebase)
     cap.frame_size = cap_size
-    cap.frame_rate = 90 #default
+    cap.frame_rate = 60 #default
     cap.settings = session_settings.get('capture_settings',{})
 
 
@@ -161,6 +161,10 @@ def eye(g_pool,cap_src,cap_size,rx_from_world,eye_id=0):
         logger.error("Could not retrieve image from capture")
         cap.close()
         return
+
+    #signal world that we are ready to go
+    pipe_to_world.send('eye%s process ready'%eye_id)
+
 
     g_pool.capture = cap
     g_pool.flip = session_settings.get('flip',False)
@@ -266,6 +270,13 @@ def eye(g_pool,cap_src,cap_size,rx_from_world,eye_id=0):
     fps_graph.update_rate = 5
     fps_graph.label = "%0.0f FPS"
 
+
+    #create a timer to control window update frequency
+    window_update_timer = timer(1/60.)
+    def window_should_update():
+        return next(window_update_timer)
+
+
     # Event loop
     while not g_pool.quit.value:
         # Get an image from the grabber
@@ -291,8 +302,8 @@ def eye(g_pool,cap_src,cap_size,rx_from_world,eye_id=0):
 
         ###  RECORDING of Eye Video (on demand) ###
         # Setup variables and lists for recording
-        if rx_from_world.poll():
-            command,raw_mode = rx_from_world.recv()
+        if pipe_to_world.poll():
+            command,raw_mode = pipe_to_world.recv()
             if command is not None:
                 record_path = command
                 logger.info("Will save eye video to: %s"%record_path)
@@ -336,49 +347,50 @@ def eye(g_pool,cap_src,cap_size,rx_from_world,eye_id=0):
         g_pool.glint_pupil_vectors.put(glint_pupil_vector)
 
         # GL drawing
-        glfwMakeContextCurrent(main_window)
-        clear_gl_screen()
+        if window_should_update():
+            glfwMakeContextCurrent(main_window)
+            clear_gl_screen()
 
-        # switch to work in normalized coordinate space
-        if g_pool.display_mode == 'algorithm':
-            update_named_texture(g_pool.image_tex,frame.img)
-        elif g_pool.display_mode in ('camera_image','roi'):
-            update_named_texture(g_pool.image_tex,frame.gray)
-        else:
-            pass
+            # switch to work in normalized coordinate space
+            if g_pool.display_mode == 'algorithm':
+                update_named_texture(g_pool.image_tex,frame.img)
+            elif g_pool.display_mode in ('camera_image','roi'):
+                update_named_texture(g_pool.image_tex,frame.gray)
+            else:
+                pass
 
-        make_coord_system_norm_based(g_pool.flip)
-        draw_named_texture(g_pool.image_tex)
-        # switch to work in pixel space
-        make_coord_system_pixel_based((frame.height,frame.width,3),g_pool.flip)
-        glints = np.array(glints)
-        if len(glints)>0 and glints[0,1]:
-            cygl_draw_points(glints[:,1:3], size=20,color=cygl_rgba(0.,0.,1.,.5),sharpness=1.)
-        if result['confidence'] >0:
-            if result.has_key('axes'):
-                pts = cv2.ellipse2Poly( (int(result['center'][0]),int(result['center'][1])),
-                                        (int(result['axes'][0]/2),int(result['axes'][1]/2)),
-                                        int(result['angle']),0,360,15)
-                cygl_draw_polyline(pts,1,cygl_rgba(1.,0,0,.5))
-            cygl_draw_points([result['center']],size=20,color=cygl_rgba(1.,0.,0.,.5),sharpness=1.)
+            make_coord_system_norm_based(g_pool.flip)
+            draw_named_texture(g_pool.image_tex)
+            # switch to work in pixel space
+            make_coord_system_pixel_based((frame.height,frame.width,3),g_pool.flip)
+            glints = np.array(glints)
+            if len(glints)>0 and glints[0,1]:
+                cygl_draw_points(glints[:,1:3], size=20,color=cygl_rgba(0.,0.,1.,.5),sharpness=1.)
 
-        # render graphs
-        graph.push_view()
-        fps_graph.draw()
-        cpu_graph.draw()
-        graph.pop_view()
+            if result['confidence'] >0:
+                if result.has_key('axes'):
+                    pts = cv2.ellipse2Poly( (int(result['center'][0]),int(result['center'][1])),
+                                            (int(result['axes'][0]/2),int(result['axes'][1]/2)),
+                                            int(result['angle']),0,360,15)
+                    cygl_draw_polyline(pts,1,cygl_rgba(1.,0,0,.5))
+                cygl_draw_points([result['center']],size=20,color=cygl_rgba(1.,0.,0.,.5),sharpness=1.)
 
-        # render GUI
-        g_pool.gui.update()
+            # render graphs
+            graph.push_view()
+            fps_graph.draw()
+            cpu_graph.draw()
+            graph.pop_view()
 
-        #render the ROI
-        if g_pool.display_mode == 'roi':
-            u_r.draw(g_pool.gui.scale)
+            # render GUI
+            g_pool.gui.update()
 
-        #update screen
-        glfwSwapBuffers(main_window)
-        glfwPollEvents()
+            #render the ROI
+            if g_pool.display_mode == 'roi':
+                u_r.draw(g_pool.gui.scale)
 
+            #update screen
+            glfwSwapBuffers(main_window)
+            glfwPollEvents()
 
     # END while running
 
@@ -426,10 +438,10 @@ def eye(g_pool,cap_src,cap_size,rx_from_world,eye_id=0):
 
     logger.debug("Process done")
 
-def eye_profiled(g_pool,cap_src,cap_size,rx_from_world,eye_id=0):
+def eye_profiled(g_pool,cap_src,cap_size,pipe_to_world,eye_id=0):
     import cProfile,subprocess,os
     from eye import eye
-    cProfile.runctx("eye(g_pool,cap_src,cap_size,rx_from_world,eye_id)",{"g_pool":g_pool,'cap_src':cap_src,'cap_size':cap_size,'rx_from_world':rx_from_world,'eye_id':eye_id},locals(),"eye%s.pstats"%eye_id)
+    cProfile.runctx("eye(g_pool,cap_src,cap_size,pipe_to_world,eye_id)",{"g_pool":g_pool,'cap_src':cap_src,'cap_size':cap_size,'pipe_to_world':pipe_to_world,'eye_id':eye_id},locals(),"eye%s.pstats"%eye_id)
     loc = os.path.abspath(__file__).rsplit('pupil_src', 1)
     gprof2dot_loc = os.path.join(loc[0], 'pupil_src', 'shared_modules','gprof2dot.py')
     subprocess.call("python "+gprof2dot_loc+" -f pstats eye%s.pstats | dot -Tpng -o eye%s_cpu_time.png"%(eye_id,eye_id), shell=True)
