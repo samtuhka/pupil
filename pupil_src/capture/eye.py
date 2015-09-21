@@ -364,7 +364,7 @@ def eye(g_pool,cap_src,cap_size,pipe_to_world,eye_id=0):
             # switch to work in pixel space
             make_coord_system_pixel_based((frame.height,frame.width,3),g_pool.flip)
             glints = np.array(glints)
-            if len(glints)>0 and glints[0,1]:
+            if len(glints)>0:
                 cygl_draw_points(glints[:,1:3], size=20,color=cygl_rgba(0.,0.,1.,.5),sharpness=1.)
 
             if result['confidence'] >0:

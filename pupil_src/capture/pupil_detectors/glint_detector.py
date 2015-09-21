@@ -75,15 +75,21 @@ class Glint_Detector(object):
         pupilDiameter = pupil['diameter']
         minGlint = None
         minDist = 10000
-        if pupil['confidence']>0.60:
+        secondDist = minDist
+        secondGlint = None
+        if pupil['confidence']> 0:
             pupilCenter = pupil['center']
             maxDist = self.glint_dist * (1.0*pupilDiameter/2)
             for glint in glints:
                 dist = math.sqrt((glint[1] - pupilCenter[0])**2 + (glint[2] - pupilCenter[1])**2)
-                if dist < maxDist and dist < minDist:
+                if dist < maxDist and dist < secondDist:
+                    secondDist = minDist
                     minDist = dist
+                    secondGlint = minGlint
                     minGlint = glint
-        if minGlint:
+        if minGlint and secondGlint:
+            glints = [minGlint, secondGlint]
+        elif minGlint:
             glints = [minGlint]
         else:
             glints = [[timestamp,0,0,0,0]]
@@ -94,10 +100,15 @@ class Glint_Detector(object):
         val,binImg = cv2.threshold(gray, self.glint_thres, 255, cv2.THRESH_BINARY)
         timestamp = frame.timestamp
         st7 = cv2.getStructuringElement(cv2.MORPH_CROSS,(7,7))
+
         binImg= cv2.morphologyEx(binImg, cv2.MORPH_OPEN, st7)
         binImg = cv2.morphologyEx(binImg, cv2.MORPH_DILATE, st7, iterations=2)
+        cv2.imshow("frame", binImg)
+        cv2.waitKey(1)
+
 
         contours, hierarchy = cv2.findContours(binImg, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        cv2.drawContours(binImg,contours,-1,(0,255,0),3)
         glints = []
         for cnt in contours:
             area = cv2.contourArea(cnt)
