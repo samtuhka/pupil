@@ -8,7 +8,7 @@
 ----------------------------------------------------------------------------------~(*)
 '''
 
-import os, sys, platform
+import os, sys, platform, errno
 import getpass
 from pyglui import ui
 import numpy as np
@@ -17,10 +17,9 @@ from plugin import Plugin
 from time import strftime,localtime,time,gmtime
 from shutil import copy2
 from glob import glob
-from audio import Audio_Capture,Audio_Input_Dict
+from audio import Audio_Input_Dict
 from file_methods import save_object
-from av_writer import JPEG_Writer
-from cv2_writer import CV_Writer
+from av_writer import JPEG_Writer, AV_Writer, Audio_Capture
 #logging
 import logging
 logger = logging.getLogger(__name__)
@@ -97,10 +96,7 @@ class Recorder(Plugin):
             try:
                 os.makedirs(default_rec_dir)
             except OSError as e:
-                #    both                               posix                          windows
-                if os.path.exists(default_rec_dir): #'File exists' in '%s'%e or 'file already exists' in '%s'%e:
-                    pass
-                else:
+                if e.errno != errno.EEXIST:
                     logger.error("Could not create Rec dir")
                     raise e
             else:
@@ -124,7 +120,6 @@ class Recorder(Plugin):
         self.show_info_menu = show_info_menu
         self.info_menu = None
         self.info_menu_conf = info_menu_conf
-        self.height, self.width = self.g_pool.capture.frame_size
 
 
     def get_init_dict(self):
@@ -235,18 +230,16 @@ class Recorder(Plugin):
 
         if self.audio_src != 'No Audio':
             audio_path = os.path.join(self.rec_path, "world.wav")
-            self.audio_writer = Audio_Capture(self.audio_devices_dict[self.audio_src],audio_path)
+            self.audio_writer = Audio_Capture(audio_path,self.audio_devices_dict[self.audio_src])
         else:
             self.audio_writer = None
 
         if self.raw_jpeg and self.g_pool.capture.jpeg_support:
             self.video_path = os.path.join(self.rec_path, "world.mp4")
             self.writer = JPEG_Writer(self.video_path,int(self.g_pool.capture.frame_rate))
-        # elif 1:
-        #     self.writer = av_writer.AV_Writer(self.video_path)
         else:
-            self.video_path = os.path.join(self.rec_path, "world.mkv")
-            self.writer = CV_Writer(self.video_path, float(self.g_pool.capture.frame_rate), self.g_pool.capture.frame_size)
+            self.video_path = os.path.join(self.rec_path, "world.mp4")
+            self.writer = AV_Writer(self.video_path)
         # positions path to eye process
         if self.record_eye:
             for tx in self.g_pool.eye_tx:
@@ -286,8 +279,7 @@ class Recorder(Plugin):
             self.data['pupil_positions'] += events['pupil_positions']
             self.data['gaze_positions'] += events['gaze_positions']
             self.timestamps.append(frame.timestamp)
-            self.writer.write_video_frame(frame)
-            # self.writer.write_video_frame_yuv422(frame)
+            self.writer.write_video_frame_compressed(frame)
             self.frame_count += 1
 
             # cv2.putText(frame.img, "Frame %s"%self.frame_count,(200,200), cv2.FONT_HERSHEY_SIMPLEX,1,(255,100,100))
@@ -374,10 +366,9 @@ class Recorder(Plugin):
             logger.warning("No previous accuracy test results.")
 
         try:
-            copy2(os.path.join(self.g_pool.user_dir,"camera_matrix.npy"),os.path.join(self.rec_path,"camera_matrix.npy"))
-            copy2(os.path.join(self.g_pool.user_dir,"dist_coefs.npy"),os.path.join(self.rec_path,"dist_coefs.npy"))
+            copy2(os.path.join(self.g_pool.user_dir,"camera_calibration"),os.path.join(self.rec_path,"camera_calibration"))
         except:
-            logger.info("No camera intrinsics found.")
+            logger.info("No camera calibration found.")
 
         try:
             with open(self.meta_info_path, 'a') as f:
@@ -388,7 +379,7 @@ class Recorder(Plugin):
                     f.write("Eye Mode\tmonocular\n")
                 f.write("Duration Time\t"+ self.get_rec_time_str()+ "\n")
                 f.write("World Camera Frames\t"+ str(self.frame_count)+ "\n")
-                f.write("World Camera Resolution\t"+ str(self.width)+"x"+str(self.height)+"\n")
+                f.write("World Camera Resolution\t"+ str(self.g_pool.capture.frame_size[0])+"x"+str(self.g_pool.capture.frame_size[1])+"\n")
                 f.write("Capture Software Version\t%s\n"%self.g_pool.version)
                 if platform.system() == "Windows":
                     username = os.environ["USERNAME"]
@@ -423,6 +414,12 @@ class Recorder(Plugin):
         self.running = False
         self.menu.read_only = False
         self.button.status_text = ''
+
+        self.timestamps = []
+        self.data = {'pupil_positions':[],'gaze_positions':[]}
+        self.pupil_pos_list = []
+        self.gaze_pos_list = []
+
 
         self.notify_all( {'name':'rec_stopped','rec_path':self.rec_path,'network_propagate':network_propagate} )
 

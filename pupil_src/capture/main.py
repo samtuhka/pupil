@@ -31,10 +31,7 @@ else:
 	# Specifiy user dir.
     user_dir = os.path.join(pupil_base_dir,'capture_settings')
     version_file = None
-    if __name__ == '__main__':
-        #compile all cython source files
-        from pyx_compiler import build_extensions
-        build_extensions()
+
 
 
 # create folder for user settings, tmp data
@@ -107,7 +104,7 @@ def main():
     # eye_src = '/Users/mkassner/Downloads/000/eye0.mkv' , '/Users/mkassner/Downloads/eye.avi'
     # world_src = "/Users/mkassner/Downloads/000/world.mkv"
 
-    # Camera video size in pixels (width,height)
+    # Default camera video size in pixels (width,height)
     eye_size = (640,480)
     world_size = (1280,720)
 

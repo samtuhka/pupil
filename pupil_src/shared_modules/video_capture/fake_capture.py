@@ -28,10 +28,14 @@ class Frame(object):
     def __init__(self, timestamp,img,index):
         self.timestamp = timestamp
         self.img = img
+        self.bgr = img
         self.height,self.width,_ = img.shape
         self._gray = None
         self._yuv = None
         self.index = index
+        #indicate that the frame does not have a native yuv or jpeg buffer
+        self.yuv_buffer = None
+        self.jpeg_buffer = None
 
     @property
     def gray(self):
@@ -88,6 +92,9 @@ class Fake_Capture(object):
     def frame_rates(self):
         return range(30,121,30)
 
+    @property
+    def frame_sizes(self):
+        return ((640,480),(1280,720),(1920,1080))
 
     @property
     def frame_rate(self):
