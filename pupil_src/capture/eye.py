@@ -334,16 +334,16 @@ def eye(g_pool,cap_src,cap_size,pipe_to_world,eye_id=0):
         g_pool.pupil_queue.put(result)
 
         #glint detection
-        glints = glint_detector.glint(frame, u_roi=u_r, pupil=result)
+        glints = glint_detector.glint(frame, eye_id, u_roi=u_r, pupil=result)
         #save glints
         g_pool.glints.put(glints)
 
 
         #save glint-pupil vector results
         if glints[0][3]:
-            glint_pupil_vector = {'timestamp': glints[0][0], 'x': result['norm_pos'][0]-glints[0][3], 'y': result['norm_pos'][1]-glints[0][4], 'pupil_confidence': result['confidence'], 'glint_found': True}
+            glint_pupil_vector = {'timestamp': glints[0][0], 'x': result['norm_pos'][0]-glints[0][3], 'y': result['norm_pos'][1]-glints[0][4], 'pupil_confidence': result['confidence'], 'glint_found': True, 'id': eye_id}
         else:
-             glint_pupil_vector = {'timestamp': glints[0][0], 'x': result['norm_pos'][0]-glints[0][3], 'y': result['norm_pos'][1]-glints[0][4], 'pupil_confidence': result['confidence'], 'glint_found': False}
+             glint_pupil_vector = {'timestamp': glints[0][0], 'x': result['norm_pos'][0]-glints[0][3], 'y': result['norm_pos'][1]-glints[0][4], 'pupil_confidence': result['confidence'], 'glint_found': False, 'id': eye_id}
         g_pool.glint_pupil_vectors.put(glint_pupil_vector)
 
         # GL drawing
@@ -364,7 +364,7 @@ def eye(g_pool,cap_src,cap_size,pipe_to_world,eye_id=0):
             # switch to work in pixel space
             make_coord_system_pixel_based((frame.height,frame.width,3),g_pool.flip)
             glints = np.array(glints)
-            if len(glints)>0:
+            if len(glints)>0 and glints[0][3]:
                 cygl_draw_points(glints[:,1:3], size=20,color=cygl_rgba(0.,0.,1.,.5),sharpness=1.)
 
             if result['confidence'] >0:

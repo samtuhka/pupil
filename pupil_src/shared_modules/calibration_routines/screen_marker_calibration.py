@@ -268,7 +268,8 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         if self.calGlint:
             map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint,self.world_size,return_params=True)
             interpol_params = calibrate.interpol_params(cal_interpol)
-            self.g_pool.plugins.add(Glint_Gaze_Mapper(self.g_pool, params2, interpol_params))
+            self.g_pool.plugins.add(Glint_Gaze_Mapper, args={'params': params2, 'interpol_params': interpol_params})
+
 
 
     def close_window(self):
