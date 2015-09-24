@@ -88,9 +88,16 @@ class Glint_Detector(object):
                     secondGlint = minGlint
                     minGlint = glint
         if minGlint and secondGlint:
-            glints = [minGlint, secondGlint]
-        elif minGlint:
-            glints = [minGlint]
+            min = np.array(minGlint[1:3]) - np.array(list(pupilCenter))
+            second = np.array(secondGlint[1:3]) - np.array(list(pupilCenter))
+            angle = math.acos(np.dot(min, second) / ((np.sum(min**2)**0.5) * (np.sum(second**2)**0.5) ))
+            if angle > math.pi/4:
+                glints = [[timestamp,0,0,0,0]]
+            else:
+             middlePoint = minGlint
+             middlePoint[1] = (minGlint[1] + secondGlint[1]) / 2
+             middlePoint[2] = (minGlint[2] + secondGlint[2]) / 2
+             glints = [middlePoint]
         else:
             glints = [[timestamp,0,0,0,0]]
         return glints
@@ -98,14 +105,10 @@ class Glint_Detector(object):
     def glint(self,frame, eye_id, u_roi, pupil):
         gray = frame.gray[u_roi.view]
         val,binImg = cv2.threshold(gray, self.glint_thres, 255, cv2.THRESH_BINARY)
-        cv2.imshow("eye thres: " + str(eye_id), binImg)
-        cv2.waitKey(1)
-
         timestamp = frame.timestamp
         st7 = cv2.getStructuringElement(cv2.MORPH_CROSS,(7,7))
+
         binImg= cv2.morphologyEx(binImg, cv2.MORPH_OPEN, st7)
-        cv2.imshow("eye open: " + str(eye_id), binImg)
-        cv2.waitKey(1)
         binImg = cv2.morphologyEx(binImg, cv2.MORPH_DILATE, st7, iterations=2)
         cv2.imshow("eye dilate: " + str(eye_id), binImg)
         cv2.waitKey(1)
