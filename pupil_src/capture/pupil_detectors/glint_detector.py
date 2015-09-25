@@ -77,7 +77,7 @@ class Glint_Detector(object):
         minDist = 10000
         secondDist = minDist
         secondGlint = None
-        if pupil['confidence']> 0:
+        if pupil['confidence']> 0.6:
             pupilCenter = pupil['center']
             maxDist = self.glint_dist * (1.0*pupilDiameter/2)
             for glint in glints:
@@ -87,17 +87,8 @@ class Glint_Detector(object):
                     minDist = dist
                     secondGlint = minGlint
                     minGlint = glint
-        if minGlint and secondGlint:
-            min = np.array(minGlint[1:3]) - np.array(list(pupilCenter))
-            second = np.array(secondGlint[1:3]) - np.array(list(pupilCenter))
-            angle = math.acos(np.dot(min, second) / ((np.sum(min**2)**0.5) * (np.sum(second**2)**0.5) ))
-            if angle > math.pi/4:
-                glints = [[timestamp,0,0,0,0]]
-            else:
-             middlePoint = minGlint
-             middlePoint[1] = (minGlint[1] + secondGlint[1]) / 2
-             middlePoint[2] = (minGlint[2] + secondGlint[2]) / 2
-             glints = [middlePoint]
+        if minGlint and not secondGlint:
+            glints = [minGlint]
         else:
             glints = [[timestamp,0,0,0,0]]
         return glints

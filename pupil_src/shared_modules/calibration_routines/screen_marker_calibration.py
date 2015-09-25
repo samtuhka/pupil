@@ -25,8 +25,7 @@ from pyglui.cygl.utils import draw_points, draw_points_norm, draw_polyline, draw
 from pyglui.pyfontstash import fontstash
 from pyglui.ui import get_opensans_font_path
 from plugin import Calibration_Plugin
-from gaze_mappers import Simple_Gaze_Mapper
-from gaze_mappers import Glint_Gaze_Mapper
+from gaze_mappers import Simple_Gaze_Mapper, Binocular_Gaze_Mapper, Glint_Gaze_Mapper
 
 #logging
 import logging
@@ -155,9 +154,9 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         audio.say("Starting Calibration")
         logger.info("Starting Calibration")
         self.sites = [  (.25, .5), (0,.5),
-                        (0.,1.),(.5,.30),(1.,1.),
+                        (0.,1.),(.5,1.),(1.,1.),
                         (1.,.5),
-                        (1., 0.),(.5, .30),(0.,0.),
+                        (1., 0.),(.5, 0.),(0.,0.),
                         (.75,.5)]
 
         self.calGlint = self.g_pool.calGlint
@@ -232,19 +231,27 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
         logger.info("Collected %s data points." %len(cal_pt_cloud))
 
-        if len(cal_pt_cloud) < 20:
+        cal_pt_cloud = np.array(cal_pt_cloud)
+        if self.g_pool.binocular:
+            not_enough_data = cal_pt_cloud[cal_pt_cloud[:,4] == 0].shape[0] < 20 or cal_pt_cloud[cal_pt_cloud[:,4] == 1].shape[0] < 20
+        else:
+            not_enough_data = cal_pt_cloud.shape[0] < 20
+        if not_enough_data:
             logger.warning("Did not collect enough data.")
             return
         if self.calGlint and len(cal_pt_cloud_glint) < 20:
             self.calGlint = False
             logger.warning("Did not collect enough data on glint. Calibrating without glint.")
 
-        cal_pt_cloud = np.array(cal_pt_cloud)
-        map_fn,params = calibrate.get_map_from_cloud(cal_pt_cloud,self.g_pool.capture.frame_size,return_params=True)
         np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud.npy'),cal_pt_cloud)
-
-        #replace current gaze mapper with new
-        self.g_pool.plugins.add(Simple_Gaze_Mapper,args={'params':params})
+        if self.g_pool.binocular:
+            map_fn,params = calibrate.get_map_from_cloud(cal_pt_cloud,self.world_size,binocular=True,return_params=True)
+            #replace current gaze mapper with new
+            self.g_pool.plugins.add(Binocular_Gaze_Mapper,args={'params':params})
+        else:
+            map_fn,params = calibrate.get_map_from_cloud(cal_pt_cloud,self.world_size,return_params=True)    
+            #replace current gaze mapper with new
+            self.g_pool.plugins.add(Simple_Gaze_Mapper,args={'params':params})
 
         refList = np.array(self.ref_list)
         cal_pt_cloud_glint = np.array(cal_pt_cloud_glint)

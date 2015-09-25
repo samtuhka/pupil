@@ -23,6 +23,7 @@ from pyglui import ui
 from plugin import Calibration_Plugin
 from gaze_mappers import Simple_Gaze_Mapper
 from gaze_mappers import Glint_Gaze_Mapper
+from gaze_mappers import Simple_Gaze_Mapper, Binocular_Gaze_Mapper, Glint_Gaze_Mapper
 #logging
 import logging
 logger = logging.getLogger(__name__)
@@ -121,7 +122,13 @@ class Manual_Marker_Calibration(Calibration_Plugin):
         cal_interpol = calibrate.preprocess_data_interpol(glint_pupil_list_copy, self.glint_list)
 
         logger.info("Collected %s data points." %len(cal_pt_cloud))
-        if len(cal_pt_cloud) < 20:
+        
+        cal_pt_cloud = np.array(cal_pt_cloud)
+        if self.g_pool.binocular:
+            not_enough_data = cal_pt_cloud[cal_pt_cloud[:,4] == 0].shape[0] < 20 or cal_pt_cloud[cal_pt_cloud[:,4] == 1].shape[0] < 20
+        else:
+            not_enough_data = cal_pt_cloud.shape[0] < 20
+        if not_enough_data:
             logger.warning("Did not collect enough data.")
             return
         if self.calGlint and len(cal_pt_cloud_glint) < 20:
@@ -136,7 +143,15 @@ class Manual_Marker_Calibration(Calibration_Plugin):
         cal_pt_cloud_glint = np.array(cal_pt_cloud_glint)
         np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud_glint.npy'),cal_pt_cloud_glint)
 
-        self.g_pool.plugins.add(Simple_Gaze_Mapper,args={'params':params})
+        np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud.npy'),cal_pt_cloud)
+        if self.g_pool.binocular:
+            map_fn,params = calibrate.get_map_from_cloud(cal_pt_cloud,self.world_size,binocular=True,return_params=True)
+            #replace current gaze mapper with new
+            self.g_pool.plugins.add(Binocular_Gaze_Mapper,args={'params':params})
+        else:
+            map_fn,params = calibrate.get_map_from_cloud(cal_pt_cloud,self.world_size,return_params=True)    
+            #replace current gaze mapper with new
+            self.g_pool.plugins.add(Simple_Gaze_Mapper,args={'params':params})
 
         if self.calGlint:
             map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint,self.world_size,return_params=True)

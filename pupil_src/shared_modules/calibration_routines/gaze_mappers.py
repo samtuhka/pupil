@@ -77,15 +77,46 @@ class Volumetric_Gaze_Mapper(Gaze_Mapping_Plugin):
     def get_init_dict(self):
         return {'params':self.params}
 
-class Bilateral_Gaze_Mapper(Gaze_Mapping_Plugin):
+class Binocular_Gaze_Mapper(Gaze_Mapping_Plugin):
     def __init__(self, g_pool,params):
-        super(Volumetric_Gaze_Mapper, self).__init__(g_pool)
+        super(Binocular_Gaze_Mapper, self).__init__(g_pool)
         self.params = params
+        self.map_fns = (make_map_function(*self.params[0:3]),make_map_function(*self.params[3:6]))
 
     def update(self,frame,events):
         gaze_pts = []
-        raise NotImplementedError()
+        gaze_mono_pts = [[],[]]
+        
+        for p in events['pupil_positions']:
+            if p['confidence'] > self.g_pool.pupil_confidence_threshold:
+                eye_id = p['id']
+                gaze_point = self.map_fns[eye_id](p['norm_pos'])
+                gaze_mono_pts[eye_id].append({'norm_pos':gaze_point,'confidence':p['confidence'],'timestamp':p['timestamp']})
+        
+        # Pair gaze positions and compute means
+        i = 0
+        j = 0
+        while i < len(gaze_mono_pts[0]) and j < len(gaze_mono_pts[1]):
+            gaze_0 = gaze_mono_pts[0][i]
+            gaze_1 = gaze_mono_pts[1][j]
+            diff = gaze_0['timestamp'] - gaze_1['timestamp']
+            if abs(diff) <= 1/15.: #assuming 30fps + slack
+                x_0, y_0 = gaze_0['norm_pos']
+                x_1, y_1 = gaze_1['norm_pos']
+                gaze_point = ((x_0+x_1)/2,(y_0+y_1)/2)
+                confidence = min(gaze_0['confidence'], gaze_1['confidence'])
+                timestamp = max(gaze_0['timestamp'], gaze_1['timestamp'])
+                gaze_pts.append({'norm_pos':gaze_point,'confidence':confidence,'timestamp':timestamp})
+                i += 1
+                j += 1
+            elif diff > 0:
+                j += 1
+            else:
+                i += 1
+        
         events['gaze_positions'] = gaze_pts
+        events['gaze_eye_0'] = gaze_mono_pts[0]
+        events['gaze_eye_1'] = gaze_mono_pts[1]
 
     def get_init_dict(self):
         return {'params':self.params}
@@ -100,6 +131,7 @@ class Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
         self.map_fn = make_map_function(*params)
         self.interpol_params = interpol_params
         self.interpol_map = make_map_function(*interpol_params)
+
 
     def update(self,frame,events):
         """
@@ -126,37 +158,3 @@ class Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
 
     def get_init_dict(self):
         return {'params':self.params, 'interpol_params': self.interpol_params}
-
-class Binocular_Gaze_Mapper(Gaze_Mapping_Plugin):
-    """docstring for Simple_Gaze_Mapper"""
-    def __init__(self, g_pool, params1, params2):
-        super(Glint_Gaze_Mapper, self).__init__(g_pool)
-        self.params = params1
-        self.params2 = params2
-        self.map_fn = (make_map_function(*params1), make_map_function(*params2))
-
-
-    def update(self,frame,events):
-        """
-        gaze_pts = []
-        for p in events['pupil_positions']:
-            if p['confidence'] > self.g_pool.pupil_confidence_threshold:
-                gaze_point = self.map_fn(p['norm_pos'])
-                gaze_pts.append({'norm_pos':gaze_point,'confidence':p['confidence'],'timestamp':p['timestamp']})
-
-        events['gaze'] = gaze_pts
-        """
-        i = 0
-        gaze_pts = []
-        for g in events['glint_pupil_vectors']:
-            if g['pupil_confidence'] > self.g_pool.pupil_confidence_threshold:
-                if g['glint_found']:
-                    i += 1
-                    v = g['x'], g['y']
-                    eye_id = g['id']
-                    gaze_glint_point = self.map_fn[eye_id](v)
-                    gaze_pts.append({'norm_pos':gaze_glint_point,'confidence':g['pupil_confidence'],'timestamp':g['timestamp'], 'foundGlint': g['glint_found']})
-        events['gaze_positions'] = gaze_pts
-
-    def get_init_dict(self):
-        return {'params':self.params, 'params2': self.params2}
