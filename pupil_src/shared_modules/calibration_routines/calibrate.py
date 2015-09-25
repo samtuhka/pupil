@@ -29,7 +29,7 @@ def get_map_from_cloud(cal_pt_clouds,screen_size=(2,2),threshold=35,binocular=Fa
     if binocular:
         eye_ids = [0, 1]
     for eye_id in eye_ids:
-        ids = cal_pt_clouds[:,4] == eye_id
+        ids = cal_pt_clouds[:,7] == eye_id
         cal_pt_cloud = cal_pt_clouds[ids]
         
         # fit once using all available data

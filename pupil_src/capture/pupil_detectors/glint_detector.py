@@ -77,7 +77,7 @@ class Glint_Detector(object):
         minDist = 10000
         secondDist = minDist
         secondGlint = None
-        if pupil['confidence']> 0.6:
+        if pupil['confidence']> 0.0:
             pupilCenter = pupil['center']
             maxDist = self.glint_dist * (1.0*pupilDiameter/2)
             for glint in glints:
@@ -89,6 +89,11 @@ class Glint_Detector(object):
                     minGlint = glint
         if minGlint and not secondGlint:
             glints = [minGlint]
+        elif minGlint and secondGlint:
+            min = np.array(minGlint[1:3]) - np.array(list(pupilCenter))
+            second = np.array(secondGlint[1:3]) - np.array(list(pupilCenter))
+            angle = math.acos(np.dot(min, second) / ((np.sum(min**2)**0.5) * (np.sum(second**2)**0.5) ))
+            glints = [minGlint, secondGlint]
         else:
             glints = [[timestamp,0,0,0,0]]
         return glints
@@ -101,8 +106,6 @@ class Glint_Detector(object):
 
         binImg= cv2.morphologyEx(binImg, cv2.MORPH_OPEN, st7)
         binImg = cv2.morphologyEx(binImg, cv2.MORPH_DILATE, st7, iterations=2)
-        cv2.imshow("eye dilate: " + str(eye_id), binImg)
-        cv2.waitKey(1)
         contours, hierarchy = cv2.findContours(binImg, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         cv2.drawContours(binImg,contours,-1,(0,255,0),3)
         glints = []

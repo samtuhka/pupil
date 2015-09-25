@@ -161,7 +161,9 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
         self.screen_marker_state = 0
         self.active = False
         self.close_window()
+
         pt_cloud = preprocess_data(self.gaze_list,self.ref_list)
+
         logger.info("Collected %s data points." %len(pt_cloud))
 
         if len(pt_cloud) < 20:
@@ -190,11 +192,11 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
             logger.warning("Please run test first!")
             return
 
-        if self.world_size == None:
+        if self.g_pool.capture.frame_size == None:
             return
 
         pt_cloud = self.pt_cloud.copy()
-        res = self.world_size
+        res = self.g_pool.capture.frame_size
         pt_cloud[:,0:3:2] *= res[0]
         pt_cloud[:,1:4:2] *= res[1]
 
@@ -215,7 +217,7 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
         logger.info("Gaze error mean in world camera pixel: %f"%accuracy_pix)
         error_mag /= px_per_degree
         logger.info('Error in degrees: %s'%error_mag)
-        logger.info('Outliers: %s'%np.where(error_mag>=self.outlier_thresh))
+        logger.info('Out    liers: %s'%np.where(error_mag>=self.outlier_thresh))
         self.accuracy = np.mean(error_mag[error_mag<self.outlier_thresh])
         logger.info('Angular accuracy: %s'%self.accuracy)
 

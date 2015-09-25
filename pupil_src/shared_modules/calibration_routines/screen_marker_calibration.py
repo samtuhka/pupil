@@ -25,7 +25,7 @@ from pyglui.cygl.utils import draw_points, draw_points_norm, draw_polyline, draw
 from pyglui.pyfontstash import fontstash
 from pyglui.ui import get_opensans_font_path
 from plugin import Calibration_Plugin
-from gaze_mappers import Simple_Gaze_Mapper, Binocular_Gaze_Mapper, Glint_Gaze_Mapper
+from gaze_mappers import Simple_Gaze_Mapper, Binocular_Gaze_Mapper, Binocular_Glint_Gaze_Mapper, Glint_Gaze_Mapper
 
 #logging
 import logging
@@ -233,7 +233,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
         cal_pt_cloud = np.array(cal_pt_cloud)
         if self.g_pool.binocular:
-            not_enough_data = cal_pt_cloud[cal_pt_cloud[:,4] == 0].shape[0] < 20 or cal_pt_cloud[cal_pt_cloud[:,4] == 1].shape[0] < 20
+            not_enough_data = cal_pt_cloud[cal_pt_cloud[:,7] == 0].shape[0] < 20 or cal_pt_cloud[cal_pt_cloud[:,7] == 1].shape[0] < 20
         else:
             not_enough_data = cal_pt_cloud.shape[0] < 20
         if not_enough_data:
@@ -245,11 +245,11 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
         np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud.npy'),cal_pt_cloud)
         if self.g_pool.binocular:
-            map_fn,params = calibrate.get_map_from_cloud(cal_pt_cloud,self.world_size,binocular=True,return_params=True)
+            map_fn,params = calibrate.get_map_from_cloud(cal_pt_cloud,self.g_pool.capture.frame_size,binocular=True,return_params=True)
             #replace current gaze mapper with new
             self.g_pool.plugins.add(Binocular_Gaze_Mapper,args={'params':params})
         else:
-            map_fn,params = calibrate.get_map_from_cloud(cal_pt_cloud,self.world_size,return_params=True)    
+            map_fn,params = calibrate.get_map_from_cloud(cal_pt_cloud,self.g_pool.capture.frame_size,return_params=True)
             #replace current gaze mapper with new
             self.g_pool.plugins.add(Simple_Gaze_Mapper,args={'params':params})
 
@@ -259,9 +259,13 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         np.save(os.path.join(self.g_pool.user_dir,'cal_ref_list.npy'),refList)
 
         if self.calGlint:
-            map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint,self.world_size,return_params=True)
-            interpol_params = calibrate.interpol_params(cal_interpol)
-            self.g_pool.plugins.add(Glint_Gaze_Mapper, args={'params': params2, 'interpol_params': interpol_params})
+            if self.g_pool.binocular:
+                map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint, self.g_pool.capture.frame_size, binocular=True, return_params=True)
+                self.g_pool.plugins.add(Binocular_Glint_Gaze_Mapper, args={'params': params2})
+            else:
+                map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint,self.g_pool.capture.frame_size,return_params=True)
+                interpol_params = calibrate.interpol_params(cal_interpol)
+                self.g_pool.plugins.add(Glint_Gaze_Mapper, args={'params': params2, 'interpol_params': interpol_params})
 
 
 
@@ -322,7 +326,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
                 if g_pt[0][3]:
                     self.glint_list.append(g_pt[0])
             for g_p_pt in recent_glint_pupil_positions:
-                if g_p_pt['glint_found']:
+                if g_p_pt['glint_found'] and g_p_pt['pupil_confidence'] > self.g_pool.pupil_confidence_threshold:
                     self.glint_pupil_list.append(g_p_pt)
 
             # Animate the screen marker
