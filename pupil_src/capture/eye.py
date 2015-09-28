@@ -346,9 +346,9 @@ def eye(g_pool,cap_src,cap_size,pipe_to_world,eye_id=0):
 
         #save glint-pupil vector results
         if glints[0][3]:
-            glint_pupil_vector = {'timestamp': glints[0][0], 'x': result['norm_pos'][0]-glints[0][3], 'y': result['norm_pos'][1]-glints[0][4], 'pupil_confidence': result['confidence'], 'glint_found': True, 'id': eye_id}
+            glint_pupil_vector = {'timestamp': glints[0][0], 'x': result['norm_pos'][0]-glints[0][3], 'y': result['norm_pos'][1]-glints[0][4], 'pupil_confidence': result['confidence'], 'glint_found': True, 'id': eye_id, 'x2': result['norm_pos'][0]-glints[1][3], 'y2': result['norm_pos'][1]-glints[1][4]}
         else:
-             glint_pupil_vector = {'timestamp': glints[0][0], 'x': result['norm_pos'][0]-glints[0][3], 'y': result['norm_pos'][1]-glints[0][4], 'pupil_confidence': result['confidence'], 'glint_found': False, 'id': eye_id}
+             glint_pupil_vector = {'timestamp': glints[0][0], 'x': result['norm_pos'][0]-glints[0][3], 'y': result['norm_pos'][1]-glints[0][4], 'pupil_confidence': result['confidence'], 'glint_found': False, 'id': eye_id, 'x2': result['norm_pos'][0]-glints[1][3], 'y2': result['norm_pos'][1]-glints[1][4]}
         g_pool.glint_pupil_vectors.put(glint_pupil_vector)
 
         # GL drawing

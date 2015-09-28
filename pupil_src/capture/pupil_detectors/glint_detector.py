@@ -87,15 +87,18 @@ class Glint_Detector(object):
                     minDist = dist
                     secondGlint = minGlint
                     minGlint = glint
-        if minGlint and not secondGlint:
-            glints = [minGlint]
-        elif minGlint and secondGlint:
+        if minGlint and secondGlint:
             min = np.array(minGlint[1:3]) - np.array(list(pupilCenter))
             second = np.array(secondGlint[1:3]) - np.array(list(pupilCenter))
             angle = math.acos(np.dot(min, second) / ((np.sum(min**2)**0.5) * (np.sum(second**2)**0.5) ))
+            middlePoint = [timestamp, 0, 0, 0, 0]
+            middlePoint[1] = (minGlint[1] + secondGlint[1]) / 2
+            middlePoint[2] = (minGlint[2] + secondGlint[2]) / 2
+            middlePoint[3] =  middlePoint[1]*1.0/frame.img.shape[1]
+            middlePoint[4] =  (frame.img.shape[0] - middlePoint[2])/frame.img.shape[0]
             glints = [minGlint, secondGlint]
         else:
-            glints = [[timestamp,0,0,0,0]]
+            glints = [[timestamp,0,0,0,0], [timestamp,0,0,0,0]]
         return glints
 
     def glint(self,frame, eye_id, u_roi, pupil):

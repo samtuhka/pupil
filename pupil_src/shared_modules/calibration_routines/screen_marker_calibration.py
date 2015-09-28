@@ -71,7 +71,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
     Points are collected at sites - not between
 
     """
-    def __init__(self, g_pool,fullscreen=True,marker_scale=1.0,sample_duration=40):
+    def __init__(self, g_pool,fullscreen=True,marker_scale=1.0,sample_duration=60):
         super(Screen_Marker_Calibration, self).__init__(g_pool)
         self.active = False
         self.detected = False
@@ -153,10 +153,10 @@ class Screen_Marker_Calibration(Calibration_Plugin):
     def start(self):
         audio.say("Starting Calibration")
         logger.info("Starting Calibration")
-        self.sites = [  (.25, .5), (0,.5),
+        self.sites = [  (.25, .5), (.3, .4), (0,.5),
                         (0.,1.),(.5,1.),(1.,1.),
-                        (1.,.5),
-                        (1., 0.),(.5, 0.),(0.,0.),
+                        (1.,.5), (.7, .2),
+                        (1., 0.),(.5, 0.),(0.,0.), (.5, .7),
                         (.75,.5)]
 
         self.calGlint = self.g_pool.calGlint
@@ -260,7 +260,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
         if self.calGlint:
             if self.g_pool.binocular:
-                map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint, self.g_pool.capture.frame_size, binocular=True, return_params=True)
+                map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint, self.g_pool.capture.frame_size, binocular=True, return_params=True, twoGlints=True)
                 self.g_pool.plugins.add(Binocular_Glint_Gaze_Mapper, args={'params': params2})
             else:
                 map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint,self.g_pool.capture.frame_size,return_params=True)

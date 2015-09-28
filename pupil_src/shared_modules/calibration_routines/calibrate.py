@@ -15,13 +15,14 @@ logger = logging.getLogger(__name__)
 import statsmodels.api as sm
 
 
-def get_map_from_cloud(cal_pt_clouds,screen_size=(2,2),threshold=35,binocular=False,return_inlier_map=False,return_params=False):
+def get_map_from_cloud(cal_pt_clouds,screen_size=(2,2),threshold=35,binocular=False,return_inlier_map=False,return_params=False, twoGlints=False):
     """
     we do a simple two pass fitting to a pair of bi-variate polynomials
     return the function to map vector
     """
     model_n = 7
-
+    if twoGlints:
+        model_n = 10
     params = []
     map_fns = []
     err_dists = np.repeat(threshold + 1, cal_pt_clouds.shape[0])
@@ -29,7 +30,10 @@ def get_map_from_cloud(cal_pt_clouds,screen_size=(2,2),threshold=35,binocular=Fa
     if binocular:
         eye_ids = [0, 1]
     for eye_id in eye_ids:
-        ids = cal_pt_clouds[:,7] == eye_id
+        if twoGlints:
+            ids = cal_pt_clouds[:,9] == eye_id
+        else:
+            ids = cal_pt_clouds[:,7] == eye_id
         cal_pt_cloud = cal_pt_clouds[ids]
         
         # fit once using all available data
@@ -102,7 +106,7 @@ def fit_error_screen(err_x,err_y,(screen_x,screen_y)):
 
 def make_model(cal_pt_cloud,n=7):
     n_points = cal_pt_cloud.shape[0]
-
+    print n
     if n==3:
         X=cal_pt_cloud[:,0]
         Y=cal_pt_cloud[:,1]
@@ -122,23 +126,49 @@ def make_model(cal_pt_cloud,n=7):
         ZX=cal_pt_cloud[:,2]
         ZY=cal_pt_cloud[:,3]
         M=np.array([X,Y,XX,YY,XY,XXYY,Ones,ZX,ZY]).transpose()
-
-    elif n==9:
-        X=cal_pt_cloud[:,0]
-        Y=cal_pt_cloud[:,1]
-        XX=X*X
-        YY=Y*Y
-        XY=X*Y
-        XXYY=XX*YY
-        XXY=XX*Y
-        YYX=YY*X
+    elif n==10:
+        X1=cal_pt_cloud[:,0]
+        Y1=cal_pt_cloud[:,1]
+        X2=cal_pt_cloud[:,2]
+        Y2=cal_pt_cloud[:,3]
+        X1X2=X1*X2
+        Y1Y2=Y1*Y2
+        X1Y1=X1*Y1
+        X2Y2=X2*Y2
+        X1X2Y1Y2=X1X2*Y1Y2
         Ones=np.ones(n_points)
-        ZX=cal_pt_cloud[:,2]
-        ZY=cal_pt_cloud[:,3]
-        M=np.array([X,Y,XX,YY,XY,XXYY,XXY,YYX,Ones,ZX,ZY]).transpose()
+        ZX=cal_pt_cloud[:,4]
+        ZY=cal_pt_cloud[:,5]
+        M=np.array([X1,Y1, X2, Y2, X1X2,Y1Y2,X1Y1,X2Y2,X1X2Y1Y2,Ones,ZX,ZY]).transpose()
     else:
         raise Exception("ERROR: Model n needs to be 3, 7 or 9")
     return M
+
+
+def make_mode_two_glints(cal_pt_cloud):
+    n_points = cal_pt_cloud.shape[0]
+    X1=cal_pt_cloud[:,0]
+    Y1=cal_pt_cloud[:,1]
+    X2=cal_pt_cloud[:,2]
+    Y2=cal_pt_cloud[:,3]
+    X1X2=X1*X2
+    Y1Y2=Y1*Y2
+    X1Y1=X1*Y1
+    X2Y2=X2*Y2
+    X1X2Y1Y2=X1X2*Y1Y2
+    Ones=np.ones(n_points)
+    ZX=cal_pt_cloud[:,3]
+    ZY=cal_pt_cloud[:,4]
+    M=np.array([X1,Y1, X2, Y2, X1X2,Y1Y2,X1Y1,X2Y2,X1X2Y1Y2,Ones,ZX,ZY]).transpose()
+    return M
+
+
+def make_map_function_two_glints(cx, cy, n):
+    def fn((X1, Y1, X2, Y2)):
+        x2 = cx[0]*X1 + cx[1]*Y1 + cx[2]*X2 + cx[3]*Y2 + cx[4]*X1*X2 + cx[5]*Y1*Y2 + cx[6]*X1*Y1 + cx[7]*X2*Y2 + cx[8]*X1*X2*Y1*Y2 + cx[9]
+        y2 = cy[0]*X1 + cy[1]*Y1 + cy[2]*X2 + cy[3]*Y2 + cy[4]*X1*X2 + cy[5]*Y1*Y2 + cy[6]*X1*Y1 + cy[7]*X2*Y2 + cy[8]*X1*X2*Y1*Y2 + cy[9]
+        return x2, y2
+    return fn
 
 
 def make_map_function(cx,cy,n):
@@ -154,7 +184,7 @@ def make_map_function(cx,cy,n):
             y2 = cy[0]*X + cy[1]*Y + cy[2]*X*X + cy[3]*Y*Y + cy[4]*X*Y + cy[5]*Y*Y*X*X +cy[6]
             return x2,y2
 
-    elif n==9:
+    elif n==10:
         def fn((X,Y)):
             #          X         Y         XX         YY         XY         XXYY         XXY         YYX         Ones
             x2 = cx[0]*X + cx[1]*Y + cx[2]*X*X + cx[3]*Y*Y + cx[4]*X*Y + cx[5]*Y*Y*X*X + cx[6]*Y*X*X + cx[7]*Y*Y*X + cx[8]
@@ -217,7 +247,7 @@ def preprocess_data_glint(glint_pupil_pts, ref_pts):
                     #only use close points
                     if abs(gp_pt['timestamp']-cur_ref_pt['timestamp']) <= 1/15.: #assuming 30fps + slack
                         try:
-                            data_pt = gp_pt['x'], gp_pt['y'],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1],cur_ref_pt['screenpos'][0], cur_ref_pt['screenpos'][1], gp_pt['timestamp'],  gp_pt['id']
+                            data_pt = gp_pt['x'], gp_pt['y'], gp_pt['x2'], gp_pt['y2'], cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1],cur_ref_pt['screenpos'][0], cur_ref_pt['screenpos'][1], gp_pt['timestamp'],  gp_pt['id']
                         except:
                             data_pt = gp_pt['x'], gp_pt['y'],cur_ref_pt['norm_pos'][0],cur_ref_pt['norm_pos'][1], gp_pt['timestamp'], gp_pt['id']
                         cal_data.append(data_pt)

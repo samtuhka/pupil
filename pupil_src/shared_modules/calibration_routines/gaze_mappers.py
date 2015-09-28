@@ -9,7 +9,7 @@
 '''
 
 from plugin import Gaze_Mapping_Plugin
-from calibrate import make_map_function
+from calibrate import make_map_function, make_map_function_two_glints
 from copy import deepcopy
 import numpy as np
 
@@ -168,7 +168,7 @@ class Binocular_Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
     def __init__(self, g_pool,params):
         super(Binocular_Glint_Gaze_Mapper, self).__init__(g_pool)
         self.params = params
-        self.map_fns = (make_map_function(*self.params[0:3]),make_map_function(*self.params[3:6]))
+        self.map_fns = (make_map_function_two_glints(*self.params[0:3]),make_map_function_two_glints(*self.params[3:6]))
 
     def update(self,frame,events):
         gaze_pts = []
@@ -177,7 +177,7 @@ class Binocular_Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
             if g['pupil_confidence'] > self.g_pool.pupil_confidence_threshold:
                 if g['glint_found']:
                     eye_id = g['id']
-                    v = g['x'], g['y']
+                    v = g['x'], g['y'], g['x2'], g['y2']
                     gaze_glint_point = self.map_fns[eye_id](v)
                     gaze_mono_pts[eye_id].append({'norm_pos':gaze_glint_point,'confidence':g['pupil_confidence'],'timestamp':g['timestamp'], 'foundGlint': g['glint_found'], 'id': g['id']})
         i = 0
@@ -199,7 +199,12 @@ class Binocular_Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
                 gaze_point = ((x_0+x_1)/2,(y_0+y_1)/2)
                 confidence = min(gaze_0['confidence'], gaze_1['confidence'])
                 timestamp = max(gaze_0['timestamp'], gaze_1['timestamp'])
-                gaze_pts.append({'norm_pos':gaze_point,'confidence':confidence,'timestamp':timestamp, 'foundGlint': True, 'id': 2})
+                if gaze_0['confidence'] > gaze_1['confidence'] + 0.5:
+                     gaze_pts.append(gaze_0)
+                elif gaze_1['confidence'] > gaze_0['confidence'] + 0.5:
+                    gaze_pts.append(gaze_1)
+                else:
+                    gaze_pts.append({'norm_pos':gaze_point,'confidence':confidence,'timestamp':timestamp, 'foundGlint': True, 'id': 2})
                 i += 1
                 j += 1
             elif diff > 0:
