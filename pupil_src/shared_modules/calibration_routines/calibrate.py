@@ -106,7 +106,6 @@ def fit_error_screen(err_x,err_y,(screen_x,screen_y)):
 
 def make_model(cal_pt_cloud,n=7):
     n_points = cal_pt_cloud.shape[0]
-    print n
     if n==3:
         X=cal_pt_cloud[:,0]
         Y=cal_pt_cloud[:,1]
@@ -114,7 +113,6 @@ def make_model(cal_pt_cloud,n=7):
         ZX=cal_pt_cloud[:,2]
         ZY=cal_pt_cloud[:,3]
         M=np.array([X,Y,Ones,ZX,ZY]).transpose()
-
     elif n==7:
         X=cal_pt_cloud[:,0]
         Y=cal_pt_cloud[:,1]

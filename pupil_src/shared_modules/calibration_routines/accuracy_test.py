@@ -161,7 +161,7 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
         self.screen_marker_state = 0
         self.active = False
         self.close_window()
-
+        refList = np.array(self.ref_list)
         pt_cloud = preprocess_data(self.gaze_list,self.ref_list)
 
         logger.info("Collected %s data points." %len(pt_cloud))
@@ -175,7 +175,6 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
             copy2(os.path.join(self.g_pool.user_dir,"accuracy_test_ref_list.npy"),os.path.join(self.g_pool.user_dir,"accuracy_test_ref_list_previous.npy"))
         except:
             logger.warning("No previous accuracy test results.")
-        refList = np.array(self.ref_list)
         pt_cloud = np.array(pt_cloud)
         np.save(os.path.join(self.g_pool.user_dir,'accuracy_test_pt_cloud.npy'),pt_cloud)
         np.save(os.path.join(self.g_pool.user_dir,'accuracy_test_ref_list.npy'),refList)

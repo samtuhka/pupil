@@ -223,6 +223,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         self.active = False
         self.close_window()
         self.button.status_text = ''
+        refList = np.array(self.ref_list)
         ref_list_copy = list(self.ref_list)
         glint_pupil_list_copy = list(self.glint_pupil_list)
         cal_pt_cloud_glint = calibrate.preprocess_data_glint(self.glint_pupil_list, ref_list_copy)
@@ -253,7 +254,6 @@ class Screen_Marker_Calibration(Calibration_Plugin):
             #replace current gaze mapper with new
             self.g_pool.plugins.add(Simple_Gaze_Mapper,args={'params':params})
 
-        refList = np.array(self.ref_list)
         cal_pt_cloud_glint = np.array(cal_pt_cloud_glint)
         np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud_glint.npy'),cal_pt_cloud_glint)
         np.save(os.path.join(self.g_pool.user_dir,'cal_ref_list.npy'),refList)
@@ -261,7 +261,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         if self.calGlint:
             if self.g_pool.binocular:
                 map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint, self.g_pool.capture.frame_size, binocular=True, return_params=True, twoGlints=True)
-                self.g_pool.plugins.add(Binocular_Glint_Gaze_Mapper, args={'params': params2})
+                self.g_pool.plugins.add(Binocular_Glint_Gaze_Mapper, args={'params': params2, 'interpolParams': params})
             else:
                 map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint,self.g_pool.capture.frame_size,return_params=True)
                 interpol_params = calibrate.interpol_params(cal_interpol)
