@@ -87,17 +87,15 @@ class Glint_Detector(object):
                     minDist = dist
                     secondGlint = minGlint
                     minGlint = glint
+        glints = []
         if minGlint and secondGlint:
             min = np.array(minGlint[1:3]) - np.array(list(pupilCenter))
             second = np.array(secondGlint[1:3]) - np.array(list(pupilCenter))
             angle = math.acos(np.dot(min, second) / ((np.sum(min**2)**0.5) * (np.sum(second**2)**0.5) ))
-            middlePoint = [timestamp, 0, 0, 0, 0]
-            middlePoint[1] = (minGlint[1] + secondGlint[1]) / 2
-            middlePoint[2] = (minGlint[2] + secondGlint[2]) / 2
-            middlePoint[3] =  middlePoint[1]*1.0/frame.img.shape[1]
-            middlePoint[4] =  (frame.img.shape[0] - middlePoint[2])/frame.img.shape[0]
-            glints = [minGlint, secondGlint]
-        else:
+            c = math.sqrt((minGlint[1] - secondGlint[1])**2 + (minGlint[2] - secondGlint[2])**2)
+            if c < 50:
+                glints = [minGlint, secondGlint]
+        if not glints:
             glints = [[timestamp,0,0,0,0], [timestamp,0,0,0,0]]
         return glints
 
@@ -106,9 +104,8 @@ class Glint_Detector(object):
         val,binImg = cv2.threshold(gray, self.glint_thres, 255, cv2.THRESH_BINARY)
         timestamp = frame.timestamp
         st7 = cv2.getStructuringElement(cv2.MORPH_CROSS,(7,7))
-
         binImg= cv2.morphologyEx(binImg, cv2.MORPH_OPEN, st7)
-        binImg = cv2.morphologyEx(binImg, cv2.MORPH_DILATE, st7, iterations=2)
+        binImg = cv2.morphologyEx(binImg, cv2.MORPH_DILATE, st7, iterations=1)
         contours, hierarchy = cv2.findContours(binImg, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         cv2.drawContours(binImg,contours,-1,(0,255,0),3)
         glints = []
@@ -134,7 +131,7 @@ class Glint_Detector(object):
 
 
     def init_gui(self,sidebar):
-        self.menu = ui.Growing_Menu('Glint  Detector')
+        self.menu = ui.Growing_Menu('Glint Detector')
         self.menu.append(ui.Slider('glint_dist',self,label='Distance from pupil',min=0,max=5,step=0.25))
         self.menu.append(ui.Slider('glint_thres',self,label='Intensity threshold',min=0,max=255,step=5))
         self.menu.append(ui.Slider('glint_min',self,label='Min size',min=1,max=100,step=1))
