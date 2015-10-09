@@ -17,6 +17,7 @@ import OpenGL.GL as gl
 from glfw import *
 import calibrate
 from circle_detector import get_candidate_ellipses
+from file_methods import Persistent_Dict
 
 import audio
 
@@ -79,7 +80,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         self.sample_duration =  sample_duration # number of frames to sample per site
         self.lead_in = 25 #frames of marker shown before starting to sample
         self.lead_out = 5 #frames of markers shown after sampling is donw
-
+        self.session_settings = Persistent_Dict(os.path.join(g_pool.user_dir,'user_settings_screen_calibration') )
 
         self.active_site = 0
         self.sites = []
@@ -113,7 +114,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
 
     def init_gui(self):
-        self.monitor_idx = 0
+        self.monitor_idx = self.session_settings.get('monitor', 0)
         self.monitor_names = [glfwGetMonitorName(m) for m in glfwGetMonitors()]
 
         #primary_monitor = glfwGetPrimaryMonitor()
@@ -443,6 +444,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         """gets called when the plugin get terminated.
            either voluntarily or forced.
         """
+        self.session_settings['monitor'] = self.monitor_idx
         if self.active:
             self.stop()
         if self._window:

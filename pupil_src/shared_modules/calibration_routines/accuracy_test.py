@@ -22,6 +22,7 @@ import OpenGL.GL as gl
 from glfw import *
 import calibrate
 from circle_detector import get_candidate_ellipses
+from file_methods import Persistent_Dict
 
 import audio
 
@@ -53,7 +54,7 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
         self.outlier_thresh = 5.
         self.accuracy = 0
         self.precision = 0
-
+        self.session_settings = Persistent_Dict(os.path.join(g_pool.user_dir,'user_settings_screen_calibration') )
         try:
             self.pt_cloud = np.load(os.path.join(self.g_pool.user_dir,'accuracy_test_pt_cloud.npy'))
             gaze,ref = self.pt_cloud[:,0:2],self.pt_cloud[:,2:4]
@@ -65,7 +66,7 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
 
 
     def init_gui(self):
-        self.monitor_idx = 0
+        self.monitor_idx = self.session_settings.get('monitor', 0)
         self.monitor_names = [glfwGetMonitorName(m) for m in glfwGetMonitors()]
 
         #primary_monitor = glfwGetPrimaryMonitor()
