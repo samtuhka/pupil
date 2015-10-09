@@ -70,7 +70,7 @@ class Glint_Detector(object):
         #cv2.circle(img,(int(pupilCenter[0]),int(pupilCenter[1])), mean,(1,0,0),2)
 
 
-    def filterGlints(self, frame, glints, pupil):
+    def filterGlints(self, frame, glints, pupil, eye_id):
         timestamp = frame.timestamp
         pupilDiameter = pupil['diameter']
         minGlint = None
@@ -96,7 +96,7 @@ class Glint_Detector(object):
             if c < 50:
                 glints = [minGlint, secondGlint]
         if not glints:
-            glints = [[timestamp,0,0,0,0], [timestamp,0,0,0,0]]
+            glints = [[timestamp,0,0,0,0, eye_id], [timestamp,0,0,0,0, eye_id]]
         return glints
 
     def glint(self,frame, eye_id, u_roi, pupil):
@@ -113,11 +113,11 @@ class Glint_Detector(object):
             area = cv2.contourArea(cnt)
             if area > self.glint_min and area< self.glint_max:
                 centroid = self.contourCenter(cnt)
-                newRow = [timestamp, centroid[0], centroid[1], centroid[0]*1.0/frame.img.shape[1], (frame.img.shape[0]-centroid[1]*1.0)/frame.img.shape[0]]
+                newRow = [timestamp, centroid[0], centroid[1], centroid[0]*1.0/frame.img.shape[1], (frame.img.shape[0]-centroid[1]*1.0)/frame.img.shape[0], eye_id]
                 glints.append (newRow)
         #if (pupil['confidence']):
         #    self.irisDetection(gray, pupil)
-        glints = self.filterGlints(frame, glints, pupil)
+        glints = self.filterGlints(frame, glints, pupil, eye_id)
         return glints
 
 

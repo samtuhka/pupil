@@ -44,7 +44,7 @@ class Simple_Gaze_Mapper(Gaze_Mapping_Plugin):
         for p in events['pupil_positions']:
             if p['confidence'] > self.g_pool.pupil_confidence_threshold:
                 gaze_point = self.map_fn(p['norm_pos'])
-                gaze_pts.append({'norm_pos':gaze_point,'confidence':p['confidence'],'timestamp':p['timestamp'],'base':[p]})
+                gaze_pts.append({'norm_pos':gaze_point,'confidence':p['confidence'],'timestamp':p['timestamp'], 'id': p['id'], 'base':[p]})
 
         events['gaze_positions'] = gaze_pts
 
@@ -108,7 +108,7 @@ class Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
                     v = self.interpol_map((g['x'], g['y']))
                     v = g['x'] - v[0], g['y'] - v[1]
                 gaze_glint_point = self.map_fn(v)
-                gaze_pts.append({'norm_pos':gaze_glint_point,'confidence':g['pupil_confidence'],'timestamp':g['timestamp'], 'foundGlint': g['glint_found']})
+                gaze_pts.append({'norm_pos':gaze_glint_point,'confidence':g['pupil_confidence'],'timestamp':g['timestamp'], 'foundGlint': g['glint_found'], 'id': g['id']})
         events['gaze_positions'] = gaze_pts
 
     def get_init_dict(self):
