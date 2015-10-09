@@ -445,6 +445,8 @@ class Screen_Marker_Calibration(Calibration_Plugin):
            either voluntarily or forced.
         """
         self.session_settings['monitor'] = self.monitor_idx
+        self.session_settings.close()
+
         if self.active:
             self.stop()
         if self._window:
