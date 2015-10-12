@@ -128,7 +128,6 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
                 self.sites[i] =  self.sites[i][0], 0.30
 
     def start(self):
-        audio.say("Starting Accuracy Test")
         logger.info("Starting Accuracy_Test")
         self.sites = [  (.5, .5), (0,.5),
                         (0.,1),(.5,1),(1.,1.),
@@ -157,7 +156,6 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
 
 
     def stop(self):
-        audio.say("Stopping Accuracy Test")
         logger.info('Stopping Accuracy_Test')
         self.screen_marker_state = 0
         self.active = False

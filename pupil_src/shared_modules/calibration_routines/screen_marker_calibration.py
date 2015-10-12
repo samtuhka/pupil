@@ -152,7 +152,6 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
 
     def start(self):
-        audio.say("Starting Calibration")
         logger.info("Starting Calibration")
         self.sites = [  (.25, .5), (.3, .4), (0,.5),
                         (0.,1.),(.5,1.),(1.,1.),
@@ -218,7 +217,6 @@ class Screen_Marker_Calibration(Calibration_Plugin):
             self.stop()
 
     def stop(self):
-        audio.say("Stopping Calibration")
         logger.info('Stopping Calibration')
         self.screen_marker_state = 0
         self.active = False
