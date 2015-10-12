@@ -229,7 +229,6 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         glint_pupil_list_copy = list(self.glint_pupil_list)
         cal_pt_cloud_glint = calibrate.preprocess_data_glint(self.glint_pupil_list, ref_list_copy)
         cal_pt_cloud = calibrate.preprocess_data(self.pupil_list,self.ref_list)
-        cal_interpol = calibrate.preprocess_data_interpol(glint_pupil_list_copy, self.glint_list)
 
         logger.info("Collected %s data points." %len(cal_pt_cloud))
 
@@ -265,8 +264,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
                 self.g_pool.plugins.add(Binocular_Glint_Gaze_Mapper, args={'params': params2, 'interpolParams': params})
             else:
                 map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint,self.g_pool.capture.frame_size,return_params=True,  twoGlints=True)
-                interpol_params = calibrate.interpol_params(cal_interpol)
-                self.g_pool.plugins.add(Glint_Gaze_Mapper, args={'params': params2, 'interpol_params': interpol_params})
+                self.g_pool.plugins.add(Glint_Gaze_Mapper, args={'params': params2, 'interpolParams': params})
 
 
 
@@ -327,7 +325,6 @@ class Screen_Marker_Calibration(Calibration_Plugin):
                 if g_pt[0][3]:
                     self.glint_list.append(g_pt[0])
             for g_p_pt in recent_glint_pupil_positions:
-                print g_p_pt
                 if g_p_pt['glint_found'] and g_p_pt['pupil_confidence'] > self.g_pool.pupil_confidence_threshold:
                     self.glint_pupil_list.append(g_p_pt)
 

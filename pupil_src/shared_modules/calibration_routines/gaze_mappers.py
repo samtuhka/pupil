@@ -80,15 +80,14 @@ class Volumetric_Gaze_Mapper(Gaze_Mapping_Plugin):
 
 class Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
     """docstring for Simple_Gaze_Mapper"""
-    def __init__(self, g_pool, params, interpol_params):
+    def __init__(self, g_pool, params, interpolParams):
         super(Glint_Gaze_Mapper, self).__init__(g_pool)
         self.params = params
-        self.map_fn = make_map_function(*params)
-        self.interpol_params = interpol_params
-        self.interpol_map = make_map_function(*interpol_params)
+        self.map_fn = make_map_function_two_glints(*params)
+        self.interpol_params = interpolParams
+        self.interpol_map = make_map_function(*interpolParams)
 
-
-    def update(self,frame,events):
+    def update(self,frame,events):  
         """
         gaze_pts = []
         for p in events['pupil_positions']:
@@ -102,17 +101,16 @@ class Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
         gaze_pts = []
         for g in events['glint_pupil_vectors']:
             if g['pupil_confidence'] > self.g_pool.pupil_confidence_threshold:
+                v = g['x'], g['y'], g['x2'], g['y2']
                 if g['glint_found']:
-                    v = g['x'], g['y']
+                    gaze_glint_point = self.map_fn(v)
                 else:
-                    v = self.interpol_map((g['x'], g['y']))
-                    v = g['x'] - v[0], g['y'] - v[1]
-                gaze_glint_point = self.map_fn(v)
+                    gaze_glint_point = self.interpol_map((g['x'], g['y']))
                 gaze_pts.append({'norm_pos':gaze_glint_point,'confidence':g['pupil_confidence'],'timestamp':g['timestamp'], 'foundGlint': g['glint_found'], 'id': g['id']})
         events['gaze_positions'] = gaze_pts
 
     def get_init_dict(self):
-        return {'params':self.params, 'interpol_params': self.interpol_params}
+        return {'params':self.params, 'interpolParams': self.interpol_params}
 
 class Binocular_Gaze_Mapper(Gaze_Mapping_Plugin):
     def __init__(self, g_pool,params):
@@ -156,7 +154,6 @@ class Binocular_Gaze_Mapper(Gaze_Mapping_Plugin):
                 j += 1
             else:
                 i += 1
-
         events['gaze_positions'] = gaze_pts
         events['gaze_eye_0'] = gaze_mono_pts[0]
         events['gaze_eye_1'] = gaze_mono_pts[1]
