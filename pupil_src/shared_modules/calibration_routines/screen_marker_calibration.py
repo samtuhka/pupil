@@ -234,7 +234,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         logger.info("Collected %s data points." %len(cal_pt_cloud))
 
         cal_pt_cloud = np.array(cal_pt_cloud)
-        if self.g_pool.binocular:
+        if self.g_pool.binocular and cal_pt_cloud.size > 0:
             not_enough_data = cal_pt_cloud[cal_pt_cloud[:,7] == 0].shape[0] < 20 or cal_pt_cloud[cal_pt_cloud[:,7] == 1].shape[0] < 20
         else:
             not_enough_data = cal_pt_cloud.shape[0] < 20
@@ -264,7 +264,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
                 map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint, self.g_pool.capture.frame_size, binocular=True, return_params=True, twoGlints=True)
                 self.g_pool.plugins.add(Binocular_Glint_Gaze_Mapper, args={'params': params2, 'interpolParams': params})
             else:
-                map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint,self.g_pool.capture.frame_size,return_params=True)
+                map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint,self.g_pool.capture.frame_size,return_params=True,  twoGlints=True)
                 interpol_params = calibrate.interpol_params(cal_interpol)
                 self.g_pool.plugins.add(Glint_Gaze_Mapper, args={'params': params2, 'interpol_params': interpol_params})
 
@@ -327,6 +327,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
                 if g_pt[0][3]:
                     self.glint_list.append(g_pt[0])
             for g_p_pt in recent_glint_pupil_positions:
+                print g_p_pt
                 if g_p_pt['glint_found'] and g_p_pt['pupil_confidence'] > self.g_pool.pupil_confidence_threshold:
                     self.glint_pupil_list.append(g_p_pt)
 
