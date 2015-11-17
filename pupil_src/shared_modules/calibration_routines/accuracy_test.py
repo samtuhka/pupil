@@ -23,6 +23,7 @@ from glfw import *
 import calibrate
 from circle_detector import get_candidate_ellipses
 from file_methods import Persistent_Dict
+from time import time
 
 import audio
 
@@ -182,6 +183,19 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
         self.error_lines = error_lines.reshape(-1,2)
         self.pt_cloud = pt_cloud
 
+        dir = self.makeVerifDir()
+        np.save(os.path.join(dir,'accuracy_test_pt_cloud.npy'),pt_cloud)
+        np.save(os.path.join(dir,'accuracy_test_ref_list.npy'),refList)
+
+    def makeVerifDir(self):
+        base_dir = self.g_pool.user_dir.rsplit(os.path.sep,1)[0]
+        recDir = os.path.join(base_dir,'recordings')
+        dir = os.path.join(recDir, "verifData/" + str(time()))
+        try:
+            os.makedirs(dir)
+        except:
+            pass
+        return dir
 
     def calc_result(self):
         #lets denormalize:

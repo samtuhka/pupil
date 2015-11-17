@@ -18,6 +18,7 @@ from glfw import *
 import calibrate
 from circle_detector import get_candidate_ellipses
 from file_methods import Persistent_Dict
+from time import time
 
 import audio
 
@@ -216,6 +217,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         if self.active:
             self.stop()
 
+
     def stop(self):
         logger.info('Stopping Calibration')
         self.screen_marker_state = 0
@@ -264,7 +266,21 @@ class Screen_Marker_Calibration(Calibration_Plugin):
                 map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint,self.g_pool.capture.frame_size,return_params=True,  twoGlints=True)
                 self.g_pool.plugins.add(Glint_Gaze_Mapper, args={'params': params2, 'interpolParams': params})
 
+        dir = self.makeCalibDir()
+        np.save(os.path.join(dir,'cal_pt_cloud.npy'),cal_pt_cloud)
+        np.save(os.path.join(dir,'cal_pt_cloud_glint.npy'),cal_pt_cloud_glint)
+        np.save(os.path.join(dir,'cal_ref_list.npy'),refList)
 
+
+    def makeCalibDir(self):
+        base_dir = self.g_pool.user_dir.rsplit(os.path.sep,1)[0]
+        recDir = os.path.join(base_dir,'recordings')
+        dir = os.path.join(recDir, "calibData/" + str(time()))
+        try:
+            os.makedirs(dir)
+        except:
+            pass
+        return dir
 
     def close_window(self):
         if self._window:
