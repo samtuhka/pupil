@@ -35,8 +35,8 @@ class Glint_Detector(object):
 
         self.glint_dist = self.session_settings.get('glint_dist', 3.0)
         self.glint_thres = self.session_settings.get('glint_thres',185.)
-        self.glint_min = self.session_settings.get('glint_min',50.)
-        self.glint_max = self.session_settings.get('glint_max',500.)
+        self.glint_min = self.session_settings.get('glint_min',0.)
+        self.glint_max = self.session_settings.get('glint_max',200.)
 
 
 
@@ -106,6 +106,7 @@ class Glint_Detector(object):
         st7 = cv2.getStructuringElement(cv2.MORPH_CROSS,(7,7))
         binImg= cv2.morphologyEx(binImg, cv2.MORPH_OPEN, st7)
         binImg = cv2.morphologyEx(binImg, cv2.MORPH_DILATE, st7, iterations=1)
+        binImg = cv2.erode(binImg, st7, iterations=1)
         contours, hierarchy = cv2.findContours(binImg, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         cv2.drawContours(binImg,contours,-1,(0,255,0),3)
         glints = []
