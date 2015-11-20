@@ -20,8 +20,7 @@ import audio
 
 from pyglui import ui
 from plugin import Calibration_Plugin
-from gaze_mappers import Simple_Gaze_Mapper
-from gaze_mappers import Simple_Gaze_Mapper, Binocular_Gaze_Mapper, Glint_Gaze_Mapper
+from gaze_mappers import Simple_Gaze_Mapper, Bilateral_Gaze_Mapper
 
 #logging
 import logging
@@ -42,8 +41,6 @@ class Natural_Features_Calibration(Calibration_Plugin):
         self.r = 40.0 # radius of circle displayed
         self.ref_list = []
         self.pupil_list = []
-        self.glint_list = []
-        self.glint_pupil_list =[]
 
 
         self.menu = None
@@ -61,10 +58,9 @@ class Natural_Features_Calibration(Calibration_Plugin):
 
 
     def deinit_gui(self):
-        if self.menu:
-            self.g_pool.calibration_menu.remove(self.menu)
+        if self.info:
             self.g_pool.calibration_menu.remove(self.info)
-            self.menu = None
+            self.info = None
         if self.button:
             self.g_pool.quickbar.remove(self.button)
             self.button = None
@@ -76,8 +72,6 @@ class Natural_Features_Calibration(Calibration_Plugin):
         else:
             self.start()
 
-
-
     def start(self):
         audio.say("Starting Calibration")
         logger.info("Starting Calibration")
@@ -88,58 +82,51 @@ class Natural_Features_Calibration(Calibration_Plugin):
         self.calGlint = self.g_pool.calGlint
 
     def stop(self):
+        # TODO: redundancy between all gaze mappers -> might be moved to parent class
         audio.say("Stopping Calibration")
         logger.info("Stopping Calibration")
         self.active = False
         self.button.status_text = ''
-        ref_list_copy = list(self.ref_list)
-        glint_pupil_list_copy = list(self.glint_pupil_list)
-        cal_pt_cloud = calibrate.preprocess_data(self.pupil_list,self.ref_list)
-        cal_pt_cloud_glint = calibrate.preprocess_data_glint(self.glint_pupil_list, ref_list_copy)
-        cal_interpol = calibrate.preprocess_data_interpol(glint_pupil_list_copy, self.glint_list)
 
-        logger.info("Collected %s data points." %len(cal_pt_cloud))
+        #img_size = self.first_img.shape[1],self.first_img.shape[0]
 
-        cal_pt_cloud = np.array(cal_pt_cloud)
         if self.g_pool.binocular:
-            not_enough_data = cal_pt_cloud[cal_pt_cloud[:,4] == 0].shape[0] < 20 or cal_pt_cloud[cal_pt_cloud[:,4] == 1].shape[0] < 20
+            cal_pt_cloud = calibrate.preprocess_data(list(self.pupil_list),list(self.ref_list),id_filter=(0,1))
+            cal_pt_cloud_eye0 = calibrate.preprocess_data(list(self.pupil_list),list(self.ref_list),id_filter=(0,))
+            cal_pt_cloud_eye1 = calibrate.preprocess_data(list(self.pupil_list),list(self.ref_list),id_filter=(1,))
         else:
-            not_enough_data = cal_pt_cloud.shape[0] < 20
-        if not_enough_data:
+            cal_pt_cloud = calibrate.preprocess_data(self.pupil_list,self.ref_list)
+
+        if self.g_pool.binocular:
+            logger.info("Collected %s binocular data points." %len(cal_pt_cloud))
+            logger.info("Collected %s data points for eye 0." %len(cal_pt_cloud_eye0))
+            logger.info("Collected %s data points for eye 1." %len(cal_pt_cloud_eye1))
+        else:
+            logger.info("Collected %s data points." %len(cal_pt_cloud))
+
+        if self.g_pool.binocular and (len(cal_pt_cloud) < 20 or len(cal_pt_cloud_eye0) < 20 or len(cal_pt_cloud_eye1) < 20) or len(cal_pt_cloud) < 20:
             logger.warning("Did not collect enough data.")
             return
 
-        if self.calGlint and len(cal_pt_cloud_glint) < 20:
-            self.calGlint = False
-            logger.warning("Did not collect enough data on glint. Calibrating without glint.")
-
         cal_pt_cloud = np.array(cal_pt_cloud)
-
-        img_size = self.first_img.shape[1],self.first_img.shape[0]
+        map_fn,params = calibrate.get_map_from_cloud(cal_pt_cloud,self.g_pool.capture.frame_size,return_params=True, binocular=self.g_pool.binocular)
         np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud.npy'),cal_pt_cloud)
-
-        cal_pt_cloud_glint = np.array(cal_pt_cloud_glint)
-        np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud_glint.npy'),cal_pt_cloud_glint)
-
-        if self.calGlint:
-            map_fn2,params2 = calibrate.get_map_from_cloud(cal_pt_cloud_glint,img_size,return_params=True)
-            interpol_params = calibrate.interpol_params(cal_interpol)
-            self.g_pool.plugins.add(Glint_Gaze_Mapper(self.g_pool, params2, interpol_params))
-
+        #replace current gaze mapper with new
         if self.g_pool.binocular:
-            map_fn,params = calibrate.get_map_from_cloud(cal_pt_cloud,img_size,binocular=True,return_params=True)
-            #replace current gaze mapper with new
-            self.g_pool.plugins.add(Binocular_Gaze_Mapper,args={'params':params})
+            # get monocular models for fallback (if only one pupil is detected)
+            cal_pt_cloud_eye0 = np.array(cal_pt_cloud_eye0)
+            cal_pt_cloud_eye1 = np.array(cal_pt_cloud_eye1)
+            _,params_eye0 = calibrate.get_map_from_cloud(cal_pt_cloud_eye0,self.g_pool.capture.frame_size,return_params=True)
+            _,params_eye1 = calibrate.get_map_from_cloud(cal_pt_cloud_eye1,self.g_pool.capture.frame_size,return_params=True)
+            self.g_pool.plugins.add(Bilateral_Gaze_Mapper,args={'params':params, 'params_eye0':params_eye0, 'params_eye1':params_eye1})
         else:
-            map_fn,params = calibrate.get_map_from_cloud(cal_pt_cloud,img_size,return_params=True)    
-            #replace current gaze mapper with new
             self.g_pool.plugins.add(Simple_Gaze_Mapper,args={'params':params})
+
 
     def update(self,frame,events):
         if self.active:
             recent_pupil_positions = events['pupil_positions']
-            recent_glint_positions = events['glint_positions']
-            recent_glint_pupil_positions = events['glint_pupil_vectors']
+
             if self.first_img is None:
                 self.first_img = frame.gray.copy()
 

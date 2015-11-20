@@ -15,61 +15,53 @@ logger = logging.getLogger(__name__)
 import statsmodels.api as sm
 
 
-def get_map_from_cloud(cal_pt_clouds,screen_size=(2,2),threshold=35,binocular=False,return_inlier_map=False,return_params=False, twoGlints=False):
+def get_map_from_cloud(cal_pt_cloud,screen_size=(2,2),threshold = 35,return_inlier_map=False,return_params=False, binocular=False, glint=False):
     """
     we do a simple two pass fitting to a pair of bi-variate polynomials
     return the function to map vector
     """
+    # fit once using all avaiable data
     model_n = 7
-    if twoGlints:
+    if glint:
         model_n = 10
-    params = []
-    map_fns = []
-    err_dists = np.repeat(threshold + 1, cal_pt_clouds.shape[0])
-    eye_ids = [0]
     if binocular:
-        eye_ids = [0, 1]
-    for eye_id in eye_ids:
-        if twoGlints:
-            ids = cal_pt_clouds[:,9] == eye_id
-        else:
-            ids = cal_pt_clouds[:,7] == eye_id
-        cal_pt_cloud = cal_pt_clouds[ids]
-        
-        # fit once using all available data
-        cx,cy,err_x,err_y = fit_poly_surface(cal_pt_cloud,model_n)
-        err_dist,err_mean,err_rms = fit_error_screen(err_x,err_y,screen_size)
-        if cal_pt_cloud[err_dist<=threshold].shape[0]: #did not disregard all points..
-            # fit again disregarding extreme outliers
-            cx,cy,new_err_x,new_err_y = fit_poly_surface(cal_pt_cloud[err_dist<=threshold],model_n)
-            map_fn = make_map_function(cx,cy,model_n)
-            new_err_dist,new_err_mean,new_err_rms = fit_error_screen(new_err_x,new_err_y,screen_size)
-    
-            logger.info('first iteration. root-mean-square residuals: %s, in pixel' %err_rms)
-            logger.info('second iteration: ignoring outliers. root-mean-square residuals: %s in pixel',new_err_rms)
-    
-            logger.info('used %i data points out of the full dataset %i: subset is %i percent' \
-                %(cal_pt_cloud[err_dist<=threshold].shape[0], cal_pt_cloud.shape[0], \
-                100*float(cal_pt_cloud[err_dist<=threshold].shape[0])/cal_pt_cloud.shape[0]))
-    
-        else: # did disregard all points. The data cannot be represented by the model in a meaningful way:
-            map_fn = make_map_function(cx,cy,model_n)
-            logger.info('First iteration. root-mean-square residuals: %s in pixel, this is bad!'%err_rms)
-            logger.warning('The data cannot be represented by the model in a meaningfull way.')
-        params.extend([cx,cy,model_n])
-        map_fns.append(map_fn)
-        err_dists[ids] = err_dist
+        model_n = 13
+        if glint:
+            model_n = 19
+    cx,cy,err_x,err_y = fit_poly_surface(cal_pt_cloud,model_n)
+    err_dist,err_mean,err_rms = fit_error_screen(err_x,err_y,screen_size)
+    if cal_pt_cloud[err_dist<=threshold].shape[0]: #did not disregard all points..
+        # fit again disregarding extreme outliers
+        cx,cy,new_err_x,new_err_y = fit_poly_surface(cal_pt_cloud[err_dist<=threshold],model_n)
+        map_fn = make_map_function(cx,cy,model_n)
+        new_err_dist,new_err_mean,new_err_rms = fit_error_screen(new_err_x,new_err_y,screen_size)
 
-    if not binocular:
-        map_fns = map_fns[0]
-    
-    if return_inlier_map and return_params:
-        return map_fns,err_dist<=threshold,params
-    if return_inlier_map and not return_params:
-        return map_fns,err_dist<=threshold
-    if return_params and not return_inlier_map:
-        return map_fns,params
-    return map_fns
+        logger.info('first iteration. root-mean-square residuals: %s, in pixel' %err_rms)
+        logger.info('second iteration: ignoring outliers. root-mean-square residuals: %s in pixel',new_err_rms)
+
+        logger.info('used %i data points out of the full dataset %i: subset is %i percent' \
+            %(cal_pt_cloud[err_dist<=threshold].shape[0], cal_pt_cloud.shape[0], \
+            100*float(cal_pt_cloud[err_dist<=threshold].shape[0])/cal_pt_cloud.shape[0]))
+
+        if return_inlier_map and return_params:
+            return map_fn,err_dist<=threshold,(cx,cy,model_n)
+        if return_inlier_map and not return_params:
+            return map_fn,err_dist<=threshold
+        if return_params and not return_inlier_map:
+            return map_fn,(cx,cy,model_n)
+        return map_fn
+    else: # did disregard all points. The data cannot be represented by the model in a meaningful way:
+        map_fn = make_map_function(cx,cy,model_n)
+        logger.info('First iteration. root-mean-square residuals: %s in pixel, this is bad!'%err_rms)
+        logger.warning('The data cannot be represented by the model in a meaningfull way.')
+
+        if return_inlier_map and return_params:
+            return map_fn,err_dist<=threshold,(cx,cy,model_n)
+        if return_inlier_map and not return_params:
+            return map_fn,err_dist<=threshold
+        if return_params and not return_inlier_map:
+            return map_fn,(cx,cy,model_n)
+        return map_fn
 
 
 
@@ -106,6 +98,7 @@ def fit_error_screen(err_x,err_y,(screen_x,screen_y)):
 
 def make_model(cal_pt_cloud,n=7):
     n_points = cal_pt_cloud.shape[0]
+
     if n==3:
         X=cal_pt_cloud[:,0]
         Y=cal_pt_cloud[:,1]
@@ -113,6 +106,17 @@ def make_model(cal_pt_cloud,n=7):
         ZX=cal_pt_cloud[:,2]
         ZY=cal_pt_cloud[:,3]
         M=np.array([X,Y,Ones,ZX,ZY]).transpose()
+
+    elif n==5:
+        X0=cal_pt_cloud[:,0]
+        Y0=cal_pt_cloud[:,1]
+        X1=cal_pt_cloud[:,2]
+        Y1=cal_pt_cloud[:,3]
+        Ones=np.ones(n_points)
+        ZX=cal_pt_cloud[:,4]
+        ZY=cal_pt_cloud[:,5]
+        M=np.array([X0,Y0,X1,Y1,Ones,ZX,ZY]).transpose()
+
     elif n==7:
         X=cal_pt_cloud[:,0]
         Y=cal_pt_cloud[:,1]
@@ -124,6 +128,7 @@ def make_model(cal_pt_cloud,n=7):
         ZX=cal_pt_cloud[:,2]
         ZY=cal_pt_cloud[:,3]
         M=np.array([X,Y,XX,YY,XY,XXYY,Ones,ZX,ZY]).transpose()
+
     elif n==10:
         X1=cal_pt_cloud[:,0]
         Y1=cal_pt_cloud[:,1]
@@ -138,34 +143,94 @@ def make_model(cal_pt_cloud,n=7):
         ZX=cal_pt_cloud[:,4]
         ZY=cal_pt_cloud[:,5]
         M=np.array([X1,Y1, X2, Y2, X1X2,Y1Y2,X1Y1,X2Y2,X1X2Y1Y2,Ones,ZX,ZY]).transpose()
+
+    elif n==13:
+        X0=cal_pt_cloud[:,0]
+        Y0=cal_pt_cloud[:,1]
+        X1=cal_pt_cloud[:,2]
+        Y1=cal_pt_cloud[:,3]
+        XX0=X0*X0
+        YY0=Y0*Y0
+        XY0=X0*Y0
+        XXYY0=XX0*YY0
+        XX1=X1*X1
+        YY1=Y1*Y1
+        XY1=X1*Y1
+        XXYY1=XX1*YY1
+        Ones=np.ones(n_points)
+        ZX=cal_pt_cloud[:,4]
+        ZY=cal_pt_cloud[:,5]
+        M=np.array([X0,Y0,X1,Y1,XX0,YY0,XY0,XXYY0,XX1,YY1,XY1,XXYY1,Ones,ZX,ZY]).transpose()
+
+    elif n==17:
+        X0=cal_pt_cloud[:,0]
+        Y0=cal_pt_cloud[:,1]
+        X1=cal_pt_cloud[:,2]
+        Y1=cal_pt_cloud[:,3]
+        XX0=X0*X0
+        YY0=Y0*Y0
+        XY0=X0*Y0
+        XXYY0=XX0*YY0
+        XX1=X1*X1
+        YY1=Y1*Y1
+        XY1=X1*Y1
+        XXYY1=XX1*YY1
+
+        X0X1 = X0*X1
+        X0Y1 = X0*Y1
+        Y0X1 = Y0*X1
+        Y0Y1 = Y0*Y1
+
+        Ones=np.ones(n_points)
+
+        ZX=cal_pt_cloud[:,4]
+        ZY=cal_pt_cloud[:,5]
+        M=np.array([X0,Y0,X1,Y1,XX0,YY0,XY0,XXYY0,XX1,YY1,XY1,XXYY1,X0X1,X0Y1,Y0X1,Y0Y1,Ones,ZX,ZY]).transpose()
+    elif n==19:
+        X1_0=cal_pt_cloud[:,0]
+        Y1_0=cal_pt_cloud[:,1]
+        X1_1=cal_pt_cloud[:,2]
+        Y1_1=cal_pt_cloud[:,3]
+        X2_0=cal_pt_cloud[:,4]
+        Y2_0=cal_pt_cloud[:,5]
+        X2_1=cal_pt_cloud[:,6]
+        Y2_1=cal_pt_cloud[:,7]
+        X1X2_0=X1_0*X2_0
+        Y1Y2_0=Y1_0*Y2_0
+        X1Y1_0=X1_0*Y1_0
+        X2Y2_0=X2_0*Y2_0
+        X1X2Y1Y2_0=X1X2_0*Y1Y2_0
+
+        X1X2_1=X1_1*X2_1
+        Y1Y2_1=Y1_1*Y2_1
+        X1Y1_1=X1_1*Y1_1
+        X2Y2_1=X2_1*Y2_1
+        X1X2Y1Y2_1=X1X2_1*Y1Y2_1
+
+        Ones=np.ones(n_points)
+        ZX=cal_pt_cloud[:,8]
+        ZY=cal_pt_cloud[:,9]
+        M=np.array([X1_0, Y1_0, X1_1, Y1_1, X2_0,Y2_0,X2_1,Y2_1, X1X2_0,Y1Y2_0, X1Y1_0, X2Y2_0, X1X2Y1Y2_0, X1X2_1,Y1Y2_1, X1Y1_1, X2Y2_1,X1X2Y1Y2_1, Ones,ZX,ZY]).transpose()
+
+
     else:
-        raise Exception("ERROR: Model n needs to be 3, 7 or 9")
+        raise Exception("ERROR: Model n needs to be 3, 5, 7 or 9")
     return M
 
 
-def make_mode_two_glints(cal_pt_cloud):
-    n_points = cal_pt_cloud.shape[0]
-    X1=cal_pt_cloud[:,0]
-    Y1=cal_pt_cloud[:,1]
-    X2=cal_pt_cloud[:,2]
-    Y2=cal_pt_cloud[:,3]
-    X1X2=X1*X2
-    Y1Y2=Y1*Y2
-    X1Y1=X1*Y1
-    X2Y2=X2*Y2
-    X1X2Y1Y2=X1X2*Y1Y2
-    Ones=np.ones(n_points)
-    ZX=cal_pt_cloud[:,3]
-    ZY=cal_pt_cloud[:,4]
-    M=np.array([X1,Y1, X2, Y2, X1X2,Y1Y2,X1Y1,X2Y2,X1X2Y1Y2,Ones,ZX,ZY]).transpose()
-    return M
 
 
 def make_map_function_two_glints(cx, cy, n):
-    def fn((X1, Y1, X2, Y2)):
-        x2 = cx[0]*X1 + cx[1]*Y1 + cx[2]*X2 + cx[3]*Y2 + cx[4]*X1*X2 + cx[5]*Y1*Y2 + cx[6]*X1*Y1 + cx[7]*X2*Y2 + cx[8]*X1*X2*Y1*Y2 + cx[9]
-        y2 = cy[0]*X1 + cy[1]*Y1 + cy[2]*X2 + cy[3]*Y2 + cy[4]*X1*X2 + cy[5]*Y1*Y2 + cy[6]*X1*Y1 + cy[7]*X2*Y2 + cy[8]*X1*X2*Y1*Y2 + cy[9]
-        return x2, y2
+    if n==10:
+        def fn((X1, Y1, X2, Y2)):
+            x2 = cx[0]*X1 + cx[1]*Y1 + cx[2]*X2 + cx[3]*Y2 + cx[4]*X1*X2 + cx[5]*Y1*Y2 + cx[6]*X1*Y1 + cx[7]*X2*Y2 + cx[8]*X1*X2*Y1*Y2 + cx[9]
+            y2 = cy[0]*X1 + cy[1]*Y1 + cy[2]*X2 + cy[3]*Y2 + cy[4]*X1*X2 + cy[5]*Y1*Y2 + cy[6]*X1*Y1 + cy[7]*X2*Y2 + cy[8]*X1*X2*Y1*Y2 + cy[9]
+            return x2, y2
+    elif n==19:
+        def fn((X1_0, Y1_0, X2_0, Y2_0),(X1_1, Y1_1, X2_1, Y2_1)):
+            x2 = cx[0]*X1_0 + cx[1]*Y1_0 + cx[2]*X1_1 + cx[3]*Y1_1 + cx[4]*X2_0 + cx[5]*Y2_0 + cx[6]*X2_1 + cx[7]*Y2_1 + cx[8]*X1_0*X2_0 + cx[9]*Y1_0*Y2_0 + cx[10]*X1_0*Y1_0 + cx[11]*X2_0*Y2_0 + cx[12]*X1_0*X2_0*Y1_0*Y2_0 + cx[13]*X1_1*X2_1 + cx[14]*Y1_1*Y2_1 + cx[15]*X1_1*Y1_1 + cx[16]*X2_1*Y2_1 + cx[17]*X1_1*X2_1*Y1_1*Y2_1 + cx[18]
+            y2 = cy[0]*X1_0 + cy[1]*Y1_0 + cy[2]*X1_1 + cy[3]*Y1_1 + cy[4]*X2_0 + cy[5]*Y2_0 + cy[6]*X2_1 + cy[7]*Y2_1 + cy[8]*X1_0*X2_0 + cy[9]*Y1_0*Y2_0 + cy[10]*X1_0*Y1_0 + cy[11]*X2_0*Y2_0 + cy[12]*X1_0*X2_0*Y1_0*Y2_0 + cy[13]*X1_1*X2_1 + cy[14]*Y1_1*Y2_1 + cy[15]*X1_1*Y1_1 + cy[16]*X2_1*Y2_1 + cy[17]*X1_1*X2_1*Y1_1*Y2_1 + cy[18]
+            return x2, y2
     return fn
 
 
@@ -174,6 +239,13 @@ def make_map_function(cx,cy,n):
         def fn((X,Y)):
             x2 = cx[0]*X + cx[1]*Y +cx[2]
             y2 = cy[0]*X + cy[1]*Y +cy[2]
+            return x2,y2
+
+    elif n==5:
+        def fn((X0,Y0),(X1,Y1)):
+            #        X0        Y0        X1        Y1        Ones
+            x2 = cx[0]*X0 + cx[1]*Y0 + cx[2]*X1 + cx[3]*Y1 + cx[4]
+            y2 = cy[0]*X0 + cy[1]*Y0 + cy[2]*X1 + cy[3]*Y1 + cy[4]
             return x2,y2
 
     elif n==7:
@@ -188,21 +260,57 @@ def make_map_function(cx,cy,n):
             x2 = cx[0]*X + cx[1]*Y + cx[2]*X*X + cx[3]*Y*Y + cx[4]*X*Y + cx[5]*Y*Y*X*X + cx[6]*Y*X*X + cx[7]*Y*Y*X + cx[8]
             y2 = cy[0]*X + cy[1]*Y + cy[2]*X*X + cy[3]*Y*Y + cy[4]*X*Y + cy[5]*Y*Y*X*X + cy[6]*Y*X*X + cy[7]*Y*Y*X + cy[8]
             return x2,y2
+
+    elif n==13:
+        def fn((X0,Y0),(X1,Y1)):
+            #        X0        Y0        X1         Y1            XX0        YY0            XY0            XXYY0                XX1            YY1            XY1            XXYY1        Ones
+            x2 = cx[0]*X0 + cx[1]*Y0 + cx[2]*X1 + cx[3]*Y1 + cx[4]*X0*X0 + cx[5]*Y0*Y0 + cx[6]*X0*Y0 + cx[7]*X0*X0*Y0*Y0 + cx[8]*X1*X1 + cx[9]*Y1*Y1 + cx[10]*X1*Y1 + cx[11]*X1*X1*Y1*Y1 + cx[12]
+            y2 = cy[0]*X0 + cy[1]*Y0 + cy[2]*X1 + cy[3]*Y1 + cy[4]*X0*X0 + cy[5]*Y0*Y0 + cy[6]*X0*Y0 + cy[7]*X0*X0*Y0*Y0 + cy[8]*X1*X1 + cy[9]*Y1*Y1 + cy[10]*X1*Y1 + cy[11]*X1*X1*Y1*Y1 + cy[12]
+            return x2,y2
+
+    elif n==17:
+        def fn((X0,Y0),(X1,Y1)):
+            #        X0        Y0        X1         Y1            XX0        YY0            XY0            XXYY0                XX1            YY1            XY1            XXYY1            X0X1            X0Y1            Y0X1        Y0Y1           Ones
+            x2 = cx[0]*X0 + cx[1]*Y0 + cx[2]*X1 + cx[3]*Y1 + cx[4]*X0*X0 + cx[5]*Y0*Y0 + cx[6]*X0*Y0 + cx[7]*X0*X0*Y0*Y0 + cx[8]*X1*X1 + cx[9]*Y1*Y1 + cx[10]*X1*Y1 + cx[11]*X1*X1*Y1*Y1 + cx[12]*X0*X1 + cx[13]*X0*Y1 + cx[14]*Y0*X1 + cx[15]*Y0*Y1 + cx[16]
+            y2 = cy[0]*X0 + cy[1]*Y0 + cy[2]*X1 + cy[3]*Y1 + cy[4]*X0*X0 + cy[5]*Y0*Y0 + cy[6]*X0*Y0 + cy[7]*X0*X0*Y0*Y0 + cy[8]*X1*X1 + cy[9]*Y1*Y1 + cy[10]*X1*Y1 + cy[11]*X1*X1*Y1*Y1 + cy[12]*X0*X1 + cy[13]*X0*Y1 + cy[14]*Y0*X1 + cy[15]*Y0*Y1 + cy[16]
+            return x2,y2
+    elif n==19:
+        def fn((X1_0, Y1_0, X2_0, Y2_0),(X1_1, Y1_1, X2_1, Y2_1)):
+            x2 = cx[0]*X1_0 + cx[1]*Y1_0 + cx[2]*X1_1 + cx[3]*Y1_1 + cx[4]*X2_0 + cx[5]*Y2_0 + cx[6]*X2_1 + cx[7]*Y2_1 + cx[8]*X1_0*X2_0 + cx[9]*Y1_0*Y2_0 + cx[10]*X1_0*Y1_0 + cx[11]*X2_0*Y2_0 + cx[12]*X1_0*X2_0*Y1_0*Y2_0 + cx[13]*X1_1*X2_1 + cx[14]*Y1_1*Y2_1 + cx[15]*X1_1*Y1_1 + cx[16]*X2_1*Y2_1 + cx[17]*X1_1*X2_1*Y1_1*Y2_1 + cx[18]
+            y2 = cy[0]*X1_0 + cy[1]*Y1_0 + cy[2]*X1_1 + cy[3]*Y1_1 + cy[4]*X2_0 + cy[5]*Y2_0 + cy[6]*X2_1 + cy[7]*Y2_1 + cy[8]*X1_0*X2_0 + cy[9]*Y1_0*Y2_0 + cy[10]*X1_0*Y1_0 + cy[11]*X2_0*Y2_0 + cy[12]*X1_0*X2_0*Y1_0*Y2_0 + cy[13]*X1_1*X2_1 + cy[14]*Y1_1*Y2_1 + cy[15]*X1_1*Y1_1 + cy[16]*X2_1*Y2_1 + cy[17]*X1_1*X2_1*Y1_1*Y2_1 + cy[18]
+            return x2, y2
     else:
-        raise Exception("ERROR: Model n needs to be 3, 7 or 9")
+        raise Exception("ERROR: Model n needs to be 3, 5, 7 or 9")
 
     return fn
 
 
-def preprocess_data(pupil_pts,ref_pts):
+def preprocess_data(pupil_pts,ref_pts,id_filter=(0,), glints=False):
     '''small utility function to deal with timestamped but uncorrelated data
-    input must be lists that contain dicts with at least "timestamp" and "norm_pos"
+    input must be lists that contain dicts with at least "timestamp" and "norm_pos" and "id:
+    filter id must be (0,) or (1,) or (0,1).
     '''
-    cal_data = []
+    assert id_filter in ( (0,),(1,),(0,1) )
 
     if len(ref_pts)<=2:
-        return cal_data
+        return []
 
+    pupil_pts = [p for p in pupil_pts if p['id'] in id_filter]
+
+    # if filter is set to handle binocular data, e.g. (0,1)
+    if id_filter == (0,1):
+        if glints:
+            return preprocess_data_binocular_glint(pupil_pts, ref_pts)
+        else:
+            return preprocess_data_binocular(pupil_pts, ref_pts)
+    else:
+        if glints:
+            return preprocess_data_glint(pupil_pts, ref_pts)
+        else:
+            return preprocess_data_monocular(pupil_pts,ref_pts)
+
+def preprocess_data_monocular(pupil_pts,ref_pts):
+    cal_data = []
     cur_ref_pt = ref_pts.pop(0)
     next_ref_pt = ref_pts.pop(0)
     while True:
@@ -230,8 +338,6 @@ def preprocess_data(pupil_pts,ref_pts):
 
 def preprocess_data_glint(glint_pupil_pts, ref_pts):
     cal_data =[]
-    if len(ref_pts)<=2:
-        return cal_data
     cur_ref_pt = ref_pts.pop(0)
     next_ref_pt = ref_pts.pop(0)
     while True:
@@ -264,6 +370,119 @@ def interpol_params(cal_data):
     cy = rlmY.params
     return (cx, cy, 3)
 
+def preprocess_data_binocular(pupil_pts, ref_pts):
+    matches = []
+
+    cur_ref_pt = ref_pts.pop(0)
+    next_ref_pt = ref_pts.pop(0)
+    while True:
+        matched = [[], [], cur_ref_pt]
+        while pupil_pts:
+            #select all points past the half-way point between current and next ref data sample
+            if pupil_pts[0]['timestamp'] <=(cur_ref_pt['timestamp']+next_ref_pt['timestamp'])/2.:
+                if abs(pupil_pts[0]['timestamp']-cur_ref_pt['timestamp']) <= 1/15.: #assuming 30fps + slack
+                    eye_id = pupil_pts[0]['id']
+                    matched[eye_id].append(pupil_pts.pop(0))
+                else:
+                    pupil_pts.pop(0)
+            else:
+                matches.append(matched)
+                break
+        if ref_pts:
+            cur_ref_pt = next_ref_pt
+            next_ref_pt = ref_pts.pop(0)
+        else:
+            break
+
+    cal_data = []
+    for pupil_pts_0, pupil_pts_1, ref_pt in matches:
+        # there must be at least one sample for each eye
+        if len(pupil_pts_0) <= 0 or len(pupil_pts_1) <= 0:
+            continue
+
+        p0 = pupil_pts_0.pop(0)
+        p1 = pupil_pts_1.pop(0)
+        while True:
+            try:
+                data_pt = p0["norm_pos"][0], p0["norm_pos"][1],p1["norm_pos"][0], p1["norm_pos"][1],ref_pt['norm_pos'][0],ref_pt['norm_pos'][1], cur_ref_pt['screenpos'][0], cur_ref_pt['screenpos'][1], p0['timestamp'], p1['timestamp']
+            except:
+                data_pt = p0["norm_pos"][0], p0["norm_pos"][1],p1["norm_pos"][0], p1["norm_pos"][1],ref_pt['norm_pos'][0],ref_pt['norm_pos'][1], p0['timestamp'], p1['timestamp']
+
+            cal_data.append(data_pt)
+
+            # keep sample with higher timestamp and increase the one with lower timestamp
+            if p0['timestamp'] <= p1['timestamp'] and pupil_pts_0:
+                p0 = pupil_pts_0.pop(0)
+                continue
+            elif p1['timestamp'] <= p0['timestamp'] and pupil_pts_1:
+                p1 = pupil_pts_1.pop(0)
+                continue
+            elif pupil_pts_0 and not pupil_pts_1:
+                p0 = pupil_pts_0.pop(0)
+            elif pupil_pts_1 and not pupil_pts_0:
+                p1 = pupil_pts_1.pop(0)
+            else:
+                break
+
+    return cal_data
+
+def preprocess_data_binocular_glint(pupil_pts, ref_pts):
+    matches = []
+
+    cur_ref_pt = ref_pts.pop(0)
+    next_ref_pt = ref_pts.pop(0)
+    while True:
+        matched = [[], [], cur_ref_pt]
+        while pupil_pts:
+            #select all points past the half-way point between current and next ref data sample
+            if pupil_pts[0]['timestamp'] <=(cur_ref_pt['timestamp']+next_ref_pt['timestamp'])/2.:
+                if abs(pupil_pts[0]['timestamp']-cur_ref_pt['timestamp']) <= 1/15.: #assuming 30fps + slack
+                    eye_id = pupil_pts[0]['id']
+                    matched[eye_id].append(pupil_pts.pop(0))
+                else:
+                    pupil_pts.pop(0)
+            else:
+                matches.append(matched)
+                break
+        if ref_pts:
+            cur_ref_pt = next_ref_pt
+            next_ref_pt = ref_pts.pop(0)
+        else:
+            break
+
+    cal_data = []
+    for pupil_pts_0, pupil_pts_1, ref_pt in matches:
+        # there must be at least one sample for each eye
+        if len(pupil_pts_0) <= 0 or len(pupil_pts_1) <= 0:
+            continue
+
+        p0 = pupil_pts_0.pop(0)
+        p1 = pupil_pts_1.pop(0)
+        while True:
+            try:
+                data_pt = p0["x"], p0["y"],p1["x"], p1["y"], p0["x2"], p0["y2"],p1["x2"], p1["y2"],ref_pt['norm_pos'][0],ref_pt['norm_pos'][1], cur_ref_pt['screenpos'][0], cur_ref_pt['screenpos'][1], p0['timestamp'], p1['timestamp']
+            except:
+                data_pt = p0["x"], p0["y"],p1["x"], p1["y"],ref_pt['norm_pos'][0],ref_pt['norm_pos'][1], p0['timestamp'], p1['timestamp']
+
+            cal_data.append(data_pt)
+            # keep sample with higher timestamp and increase the one with lower timestamp
+            if p0['timestamp'] <= p1['timestamp'] and pupil_pts_0:
+                p0 = pupil_pts_0.pop(0)
+                continue
+            elif p1['timestamp'] <= p0['timestamp'] and pupil_pts_1:
+                p1 = pupil_pts_1.pop(0)
+                continue
+            elif pupil_pts_0 and not pupil_pts_1:
+                p0 = pupil_pts_0.pop(0)
+            elif pupil_pts_1 and not pupil_pts_0:
+                p1 = pupil_pts_1.pop(0)
+            else:
+                break
+
+    return cal_data
+
+
+
 def preprocess_data_interpol(pupil_glint_pts, glint_pts):
     cal_data =[]
     if len(glint_pts)<=20:
@@ -284,6 +503,7 @@ def preprocess_data_interpol(pupil_glint_pts, glint_pts):
     ZY=glint[:,4]
     cal_data=np.array([X,Y, Ones,ZX,ZY]).transpose()
     return cal_data
+
 
 # if __name__ == '__main__':
 #     import matplotlib.pyplot as plt

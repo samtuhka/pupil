@@ -153,6 +153,8 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
             #always save gaze positions as opposed to pupil positons during calibration
             for pt in events.get('gaze_positions',[]):
                 if pt['confidence'] > self.g_pool.pupil_confidence_threshold:
+                    #we add an id for the calibration preprocess data to work as is usually expects pupil data.
+                    pt['id'] = 0
                     self.gaze_list.append(pt)
 
 
@@ -229,7 +231,7 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
         logger.info("Gaze error mean in world camera pixel: %f"%accuracy_pix)
         error_mag /= px_per_degree
         logger.info('Error in degrees: %s'%error_mag)
-        logger.info('Out    liers: %s'%np.where(error_mag>=self.outlier_thresh))
+        logger.info('Outliers: %s'%np.where(error_mag>=self.outlier_thresh))
         self.accuracy = np.mean(error_mag[error_mag<self.outlier_thresh])
         logger.info('Angular accuracy: %s'%self.accuracy)
 

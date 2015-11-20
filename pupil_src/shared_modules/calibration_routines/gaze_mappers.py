@@ -12,6 +12,7 @@ from plugin import Gaze_Mapping_Plugin
 from calibrate import make_map_function, make_map_function_two_glints
 from copy import deepcopy
 import numpy as np
+from pyglui import ui
 
 
 class Dummy_Gaze_Mapper(Gaze_Mapping_Plugin):
@@ -77,6 +78,93 @@ class Volumetric_Gaze_Mapper(Gaze_Mapping_Plugin):
     def get_init_dict(self):
         return {'params':self.params}
 
+class Bilateral_Gaze_Mapper(Gaze_Mapping_Plugin):
+    def __init__(self, g_pool,params,params_eye0,params_eye1):
+        super(Gaze_Mapping_Plugin, self).__init__(g_pool)
+        self.params = params
+        self.params_eye0 = params_eye0
+        self.params_eye1 = params_eye1
+        self.multivariate = True
+        self.map_fn = make_map_function(*self.params)
+        self.map_fn_fallback = []
+        self.map_fn_fallback.append(make_map_function(*self.params_eye0))
+        self.map_fn_fallback.append(make_map_function(*self.params_eye1))
+
+    def init_gui(self):
+        self.menu = ui.Growing_Menu('Binocular Gaze Mapping')
+        self.g_pool.sidebar.insert(3,self.menu)
+        self.menu.append(ui.Switch('multivariate',self,on_val=True,off_val=False,label='Multivariate Mode'))
+
+    def update(self,frame,events):
+
+        pupil_pts_0 = []
+        pupil_pts_1 = []
+        for p in events['pupil_positions']:
+            if p['confidence'] > self.g_pool.pupil_confidence_threshold:
+                if p['id'] == 0:
+                    pupil_pts_0.append(p)
+                else:
+                    pupil_pts_1.append(p)
+
+        # try binocular mapping (needs at least 1 pupil position in each list)
+        gaze_pts = []
+        if len(pupil_pts_0) > 0 and len(pupil_pts_1) > 0:
+            gaze_pts = self._map_binocular(pupil_pts_0, pupil_pts_1, self.multivariate)
+        # fallback to monocular if something went wrong
+        else:
+            for p in pupil_pts_0:
+                gaze_point = self.map_fn_fallback[0](p['norm_pos'])
+                gaze_pts.append({'norm_pos':gaze_point,'confidence':p['confidence'],'timestamp':p['timestamp'], 'id': p['id'], 'base':[p]})
+            for p in pupil_pts_1:
+                gaze_point = self.map_fn_fallback[1](p['norm_pos'])
+                gaze_pts.append({'norm_pos':gaze_point,'confidence':p['confidence'],'timestamp':p['timestamp'], 'id': p['id'], 'base':[p]})
+
+        events['gaze_positions'] = gaze_pts
+
+    def _map_binocular(self, pupil_pts_0, pupil_pts_1,multivariate=True):
+        # maps gaze with binocular mapping
+        # requires each list to contain at least one item!
+        # returns 1 gaze point at minimum
+        gaze_pts = []
+        p0 = pupil_pts_0.pop(0)
+        p1 = pupil_pts_1.pop(0)
+        while True:
+            if multivariate:
+                gaze_point = self.map_fn(p0['norm_pos'], p1['norm_pos'])
+            else:
+                gaze_point_eye0 = self.map_fn_fallback[0](p0['norm_pos'])
+                gaze_point_eye1 = self.map_fn_fallback[1](p1['norm_pos'])
+                gaze_point = (gaze_point_eye0[0] + gaze_point_eye1[0])/2. , (gaze_point_eye0[1] + gaze_point_eye1[1])/2.
+            confidence = (p0['confidence'] + p1['confidence'])/2.
+            ts = (p0['timestamp'] + p1['timestamp'])/2.
+            gaze_pts.append({'norm_pos':gaze_point,'confidence':confidence,'timestamp':ts, 'id': 2, 'base':[p0, p1]})
+
+            # keep sample with higher timestamp and increase the one with lower timestamp
+            if p0['timestamp'] <= p1['timestamp'] and pupil_pts_0:
+                p0 = pupil_pts_0.pop(0)
+                continue
+            elif p1['timestamp'] <= p0['timestamp'] and pupil_pts_1:
+                p1 = pupil_pts_1.pop(0)
+                continue
+            elif pupil_pts_0 and not pupil_pts_1:
+                p0 = pupil_pts_0.pop(0)
+            elif pupil_pts_1 and not pupil_pts_0:
+                p1 = pupil_pts_1.pop(0)
+            else:
+                break
+
+        return gaze_pts
+
+    def deinit_gui(self):
+        if self.menu:
+            self.g_pool.sidebar.remove(self.menu)
+            self.menu = None
+
+    def cleanup(self):
+        self.deinit_gui()
+
+    def get_init_dict(self):
+        return {'params':self.params, 'params_eye0':self.params_eye0, 'params_eye1':self.params_eye1}
 
 class Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
     """docstring for Simple_Gaze_Mapper"""
@@ -87,7 +175,7 @@ class Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
         self.interpol_params = interpolParams
         self.interpol_map = make_map_function(*interpolParams)
 
-    def update(self,frame,events):  
+    def update(self,frame,events):
         """
         gaze_pts = []
         for p in events['pupil_positions']:
@@ -213,3 +301,96 @@ class Binocular_Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
 
     def get_init_dict(self):
         return {'params':self.params, 'interpolParams': self.paramsInterpol}
+
+
+class Bilateral_Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
+    def __init__(self, g_pool,params,params_eye0,params_eye1):
+        super(Gaze_Mapping_Plugin, self).__init__(g_pool)
+        self.params = params
+        self.params_eye0 = params_eye0
+        self.params_eye1 = params_eye1
+        self.multivariate = False
+        self.map_fn = make_map_function_two_glints(*self.params)
+        self.map_fn_fallback = []
+        self.map_fn_fallback.append(make_map_function_two_glints(*self.params_eye0))
+        self.map_fn_fallback.append(make_map_function_two_glints(*self.params_eye1))
+
+    def init_gui(self):
+        self.menu = ui.Growing_Menu('Binocular Gaze Mapping')
+        self.g_pool.sidebar.insert(3,self.menu)
+        self.menu.append(ui.Switch('multivariate',self,on_val=True,off_val=False,label='Multivariate Mode'))
+
+    def update(self,frame,events):
+
+        glint_pts_0 = []
+        glint_pts_1 = []
+        for g in events['glint_pupil_vectors']:
+            if g['pupil_confidence'] > self.g_pool.pupil_confidence_threshold and g['glint_found']:
+                if g['id'] == 0:
+                    glint_pts_0.append(g)
+                else:
+                    glint_pts_1.append(g)
+
+        # try binocular mapping (needs at least 1 pupil position in each list)
+        gaze_pts = []
+        if len(glint_pts_0) > 0 and len(glint_pts_1) > 0:
+            gaze_pts = self._map_binocular(glint_pts_0, glint_pts_1, self.multivariate)
+        # fallback to monocular if something went wrong
+        else:
+            for g in glint_pts_0:
+                v = g['x'], g['y'], g['x2'], g['y2']
+                gaze_glint_point = self.map_fn_fallback[0](v)
+                gaze_pts.append({'norm_pos':gaze_glint_point,'confidence':g['pupil_confidence'],'timestamp':g['timestamp'], 'foundGlint': g['glint_found'], 'id': g['id']})
+            for g in glint_pts_1:
+                v = g['x'], g['y'], g['x2'], g['y2']
+                gaze_glint_point = self.map_fn_fallback[1](v)
+                gaze_pts.append({'norm_pos':gaze_glint_point,'confidence':g['pupil_confidence'],'timestamp':g['timestamp'], 'foundGlint': g['glint_found'], 'id': g['id']})
+
+        events['gaze_positions'] = gaze_pts
+
+    def _map_binocular(self, glint_pts_0, glint_pts_1,multivariate=True):
+        # maps gaze with binocular mapping
+        # requires each list to contain at least one item!
+        # returns 1 gaze point at minimum
+        gaze_pts = []
+        g0 = glint_pts_0.pop(0)
+        g1 = glint_pts_1.pop(0)
+        while True:
+            v0 = g0['x'], g0['y'], g0['x2'], g0['y2']
+            v1 = g1['x'], g1['y'], g1['x2'], g1['y2']
+            if multivariate:
+                gaze_point = self.map_fn(v0, v1)
+            else:
+                gaze_point_eye0 = self.map_fn_fallback[0](v0)
+                gaze_point_eye1 = self.map_fn_fallback[1](v1)
+                gaze_point = (gaze_point_eye0[0] + gaze_point_eye1[0])/2. , (gaze_point_eye0[1] + gaze_point_eye1[1])/2.
+            confidence = (g0['pupil_confidence'] + g1['pupil_confidence'])/2.
+            ts = (g0['timestamp'] + g1['timestamp'])/2.
+            gaze_pts.append({'norm_pos':gaze_point,'confidence':confidence,'timestamp':ts,'foundGlint': True, 'id': 2})
+
+            # keep sample with higher timestamp and increase the one with lower timestamp
+            if g0['timestamp'] <= g1['timestamp'] and glint_pts_0:
+                p0 = glint_pts_0.pop(0)
+                continue
+            elif g1['timestamp'] <= g0['timestamp'] and glint_pts_1:
+                g1 = glint_pts_1.pop(0)
+                continue
+            elif glint_pts_0 and not glint_pts_1:
+                g0 = glint_pts_0.pop(0)
+            elif glint_pts_1 and not glint_pts_0:
+                g1 = glint_pts_1.pop(0)
+            else:
+                break
+
+        return gaze_pts
+
+    def deinit_gui(self):
+        if self.menu:
+            self.g_pool.sidebar.remove(self.menu)
+            self.menu = None
+
+    def cleanup(self):
+        self.deinit_gui()
+
+    def get_init_dict(self):
+        return {'params':self.params, 'params_eye0':self.params_eye0, 'params_eye1':self.params_eye1}
