@@ -229,6 +229,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         self.close_window()
         self.button.status_text = ''
         ref_list_copy = list(self.ref_list)
+        ref_list = list(self.ref_list)
         glint_pupil_list_copy = list(self.glint_pupil_list)
         if self.g_pool.binocular:
             cal_pt_cloud = calibrate.preprocess_data(list(self.pupil_list),list(self.ref_list),id_filter=(0,1))
@@ -260,6 +261,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
 
         np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud.npy'),cal_pt_cloud)
+        np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud_glint.npy'),cal_pt_cloud_glint)
         #replace current gaze mapper with new
         if self.g_pool.binocular:
             # get monocular models for fallback (if only one pupil is detected)
@@ -280,6 +282,25 @@ class Screen_Marker_Calibration(Calibration_Plugin):
             else:
                 self.g_pool.plugins.add(Glint_Gaze_Mapper, args={'params': params_glint, 'interpolParams': params})
 
+        dir = self.makeCalibDir()
+        np.save(os.path.join(dir,'cal_pt_cloud.npy'),cal_pt_cloud)
+        np.save(os.path.join(dir,'cal_pt_cloud_eye0.npy'),cal_pt_cloud_eye0)
+        np.save(os.path.join(dir,'cal_pt_cloud_eye1.npy'),cal_pt_cloud_eye1)
+        np.save(os.path.join(dir,'cal_pt_cloud_glint.npy'),cal_pt_cloud_glint)
+        np.save(os.path.join(dir,'cal_pt_cloud_eye0_glint.npy'),cal_pt_cloud_eye0_glint)
+        np.save(os.path.join(dir,'cal_pt_cloud_eye1_glint.npy'),cal_pt_cloud_eye1_glint)
+        np.save(os.path.join(dir,'cal_ref_list.npy'),ref_list)
+
+
+    def makeCalibDir(self):
+        base_dir = self.g_pool.user_dir.rsplit(os.path.sep,1)[0]
+        recDir = os.path.join(base_dir,'recordings')
+        dir = os.path.join(recDir, "calibData/" + str(time()))
+        try:
+            os.makedirs(dir)
+        except:
+            pass
+        return dir
 
     def close_window(self):
         if self._window:

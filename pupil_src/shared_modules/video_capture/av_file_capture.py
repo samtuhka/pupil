@@ -11,7 +11,7 @@
 import os,sys
 import av
 
-assert av.__version__ >= '0.2.5'
+assert av.__version__ >= '0.2.4'
 
 import numpy as np
 from time import time,sleep
