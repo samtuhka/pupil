@@ -179,11 +179,6 @@ class Binocular_Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
                     v = g['x'], g['y'], g['x2'], g['y2']
                     gaze_glint_point = self.map_fns[eye_id](v)
                     gaze_mono_pts[eye_id].append({'norm_pos':gaze_glint_point,'confidence':g['pupil_confidence'],'timestamp':g['timestamp'], 'foundGlint': g['glint_found'], 'id': g['id']})
-                else:
-                    eye_id = g['id']
-                    v = g['x'], g['y']
-                    gaze_glint_point = self.map_fns_interpol[eye_id](v)
-                    gaze_mono_pts[eye_id].append({'norm_pos':gaze_glint_point,'confidence':g['pupil_confidence'],'timestamp':g['timestamp'], 'foundGlint': g['glint_found'], 'id': g['id']})
 
         i = 0
         j = 0
@@ -203,13 +198,8 @@ class Binocular_Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
                 x_1, y_1 = gaze_1['norm_pos']
                 gaze_point = ((x_0+x_1)/2,(y_0+y_1)/2)
                 confidence = min(gaze_0['confidence'], gaze_1['confidence'])
-                timestamp = max(gaze_0['timestamp'], gaze_1['timestamp'])
-                if (gaze_0['confidence'] > gaze_1['confidence'] + 0.5) or (gaze_0['foundGlint'] and not gaze_1['foundGlint']):
-                     gaze_pts.append(gaze_0)
-                elif (gaze_1['confidence'] > gaze_0['confidence'] + 0.5) or (gaze_1['foundGlint'] and not gaze_0['foundGlint']):
-                    gaze_pts.append(gaze_1)
-                else:
-                    gaze_pts.append({'norm_pos':gaze_point,'confidence':confidence,'timestamp':timestamp, 'foundGlint': True, 'id': 2})
+                timestamp = (gaze_0['timestamp'] + gaze_1['timestamp'])/2
+                gaze_pts.append({'norm_pos':gaze_point,'confidence':confidence,'timestamp':timestamp, 'foundGlint': True, 'id': 2})
                 i += 1
                 j += 1
             elif diff > 0:

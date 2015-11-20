@@ -91,7 +91,7 @@ class Glint_Detector(object):
         if minGlint and secondGlint:
             min = np.array(minGlint[1:3]) - np.array(list(pupilCenter))
             second = np.array(secondGlint[1:3]) - np.array(list(pupilCenter))
-            angle = math.acos(np.dot(min, second) / ((np.sum(min**2)**0.5) * (np.sum(second**2)**0.5) ))
+            #angle = math.acos(np.dot(min, second) / ((np.sum(min**2)**0.5) * (np.sum(second**2)**0.5) ))
             c = math.sqrt((minGlint[1] - secondGlint[1])**2 + (minGlint[2] - secondGlint[2])**2)
             if c < 50:
                 glints = [minGlint, secondGlint]
