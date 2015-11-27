@@ -158,10 +158,10 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         #self.stop()
 
         logger.info("Starting Calibration")
-        self.sites = [  (.25, .5), (.3, .4), (0,.5),
-                        (0.,1.),(.5,1.),(1.,1.),
-                        (1.,.5), (.7, .2),
-                        (1., 0.),(.5, 0.),(0.,0.), (.5, .7),
+        self.sites = [  (.25, .5), (.3, .4), (.05,.5),
+                        (.05,.95),(.5,.95),(.95,1.),
+                        (.95,.5), (.7, .2),
+                        (.95, .05),(.5, 0.25),(.05,.05), (.5, .7),
                         (.75,.5)]
 
         self.calGlint = self.g_pool.calGlint
@@ -257,7 +257,6 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         map_fn,params = calibrate.get_map_from_cloud(cal_pt_cloud,self.g_pool.capture.frame_size,return_params=True, binocular=self.g_pool.binocular)
 
         cal_pt_cloud_glint = np.array(cal_pt_cloud_glint)
-        map_fn_glint,params_glint = calibrate.get_map_from_cloud(cal_pt_cloud_glint,self.g_pool.capture.frame_size,return_params=True, binocular=self.g_pool.binocular, glint=True)
 
 
         np.save(os.path.join(self.g_pool.user_dir,'cal_pt_cloud.npy'),cal_pt_cloud)
@@ -273,6 +272,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         else:
             self.g_pool.plugins.add(Simple_Gaze_Mapper,args={'params':params})
         if self.calGlint:
+            map_fn_glint,params_glint = calibrate.get_map_from_cloud(cal_pt_cloud_glint,self.g_pool.capture.frame_size,return_params=True, binocular=self.g_pool.binocular, glint=True)
             if self.g_pool.binocular:
                 cal_pt_cloud_eye0_glint= np.array(cal_pt_cloud_glint_eye0)
                 cal_pt_cloud_eye1_glint = np.array(cal_pt_cloud_glint_eye1)
