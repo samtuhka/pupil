@@ -284,12 +284,13 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
         dir = self.makeCalibDir()
         np.save(os.path.join(dir,'cal_pt_cloud.npy'),cal_pt_cloud)
-        np.save(os.path.join(dir,'cal_pt_cloud_eye0.npy'),cal_pt_cloud_eye0)
-        np.save(os.path.join(dir,'cal_pt_cloud_eye1.npy'),cal_pt_cloud_eye1)
         np.save(os.path.join(dir,'cal_pt_cloud_glint.npy'),cal_pt_cloud_glint)
-        np.save(os.path.join(dir,'cal_pt_cloud_eye0_glint.npy'),cal_pt_cloud_eye0_glint)
-        np.save(os.path.join(dir,'cal_pt_cloud_eye1_glint.npy'),cal_pt_cloud_eye1_glint)
         np.save(os.path.join(dir,'cal_ref_list.npy'),ref_list)
+        if self.g_pool.binocular:
+            np.save(os.path.join(dir,'cal_pt_cloud_eye0.npy'),cal_pt_cloud_eye0)
+            np.save(os.path.join(dir,'cal_pt_cloud_eye1.npy'),cal_pt_cloud_eye1)
+            np.save(os.path.join(dir,'cal_pt_cloud_eye0_glint.npy'),cal_pt_cloud_glint_eye0)
+            np.save(os.path.join(dir,'cal_pt_cloud_eye1_glint.npy'),cal_pt_cloud_glint_eye1)
 
 
     def makeCalibDir(self):
