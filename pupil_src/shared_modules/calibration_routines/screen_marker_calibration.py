@@ -73,7 +73,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
     Points are collected at sites - not between
 
     """
-    def __init__(self, g_pool,fullscreen=True,marker_scale=1.0,sample_duration=60):
+    def __init__(self, g_pool,fullscreen=True,marker_scale=1.0,sample_duration=45):
         super(Screen_Marker_Calibration, self).__init__(g_pool)
         self.active = False
         self.detected = False
@@ -159,10 +159,10 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
         logger.info("Starting Calibration")
         self.sites = [  (.25, .5), (.3, .4), (.05,.5),
-                        (.05,.95),(.5,.95),(.95,1.),
+                        (.05,.95),(.5,.95),(.95, .95),
                         (.95,.5), (.7, .2),
                         (.95, .05),(.5, 0.25),(.05,.05), (.5, .7),
-                        (.75,.5)]
+                        (.75,.5), (.4, .4), (.6, .8)]
 
         self.calGlint = self.g_pool.calGlint
         self.active_site = 0
