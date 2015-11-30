@@ -134,15 +134,24 @@ def make_model(cal_pt_cloud,n=7):
         Y1=cal_pt_cloud[:,1]
         X2=cal_pt_cloud[:,2]
         Y2=cal_pt_cloud[:,3]
-        X1X2=X1*X2
-        Y1Y2=Y1*Y2
-        X1Y1=X1*Y1
-        X2Y2=X2*Y2
-        X1X2Y1Y2=X1X2*Y1Y2
+        D = ((X1 - X2)**2 + (Y1 - Y2)**2)**0.5
+        X1 /= D
+        Y1 /= D
+        X2 /= D
+        Y2 /= D
+        X = (X1 + X2) * 0.5
+        Y = (Y1 + Y2) * 0.5
+        XX = X*X
+        YY = Y*Y
+        XY = X*Y
+        XXX = XX*X
+        YYY = YY*Y
+        XXY = XX*Y
+        YYX = YY*X
         Ones=np.ones(n_points)
         ZX=cal_pt_cloud[:,4]
         ZY=cal_pt_cloud[:,5]
-        M=np.array([X1,Y1, X2, Y2, X1X2,Y1Y2,X1Y1,X2Y2,X1X2Y1Y2,Ones,ZX,ZY]).transpose()
+        M=np.array([X, Y, XX, YY, XY,XXX,YYY,XXY,YYX, Ones,ZX,ZY]).transpose()
 
     elif n==13:
         X0=cal_pt_cloud[:,0]
@@ -223,8 +232,15 @@ def make_model(cal_pt_cloud,n=7):
 def make_map_function_two_glints(cx, cy, n):
     if n==10:
         def fn((X1, Y1, X2, Y2)):
-            x2 = cx[0]*X1 + cx[1]*Y1 + cx[2]*X2 + cx[3]*Y2 + cx[4]*X1*X2 + cx[5]*Y1*Y2 + cx[6]*X1*Y1 + cx[7]*X2*Y2 + cx[8]*X1*X2*Y1*Y2 + cx[9]
-            y2 = cy[0]*X1 + cy[1]*Y1 + cy[2]*X2 + cy[3]*Y2 + cy[4]*X1*X2 + cy[5]*Y1*Y2 + cy[6]*X1*Y1 + cy[7]*X2*Y2 + cy[8]*X1*X2*Y1*Y2 + cy[9]
+            D = ((X1 - X2)**2 + (Y1 - Y2)**2)**0.5
+            X1 /= D
+            Y1 /= D
+            X2 /= D
+            Y2 /= D
+            X = (X1 + X2) * 0.5
+            Y = (Y1 + Y2) * 0.5
+            x2 = cx[0]*X + cx[1]*Y + cx[2]*X*X + cx[3]*Y*Y + cx[4]*X*Y + cx[5]*X*X*X + cx[6]*Y*Y*Y + cx[7]*X*X*Y + cx[8]*Y*Y*X + cx[9]
+            y2 = cy[0]*X + cy[1]*Y + cy[2]*X*X + cy[3]*Y*Y + cy[4]*X*Y + cy[5]*X*X*X + cy[6]*Y*Y*Y + cy[7]*X*X*Y + cy[8]*Y*Y*X + cy[9]
             return x2, y2
     elif n==19:
         def fn((X1_0, Y1_0, X2_0, Y2_0),(X1_1, Y1_1, X2_1, Y2_1)):
