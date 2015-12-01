@@ -13,6 +13,7 @@ import numpy as np
 import logging
 logger = logging.getLogger(__name__)
 import statsmodels.api as sm
+import math
 
 
 def get_map_from_cloud(cal_pt_cloud,screen_size=(2,2),threshold = 35,return_inlier_map=False,return_params=False, binocular=False, glint=False):
@@ -134,13 +135,10 @@ def make_model(cal_pt_cloud,n=7):
         Y1=cal_pt_cloud[:,1]
         X2=cal_pt_cloud[:,2]
         Y2=cal_pt_cloud[:,3]
-        D = ((X1 - X2)**2 + (Y1 - Y2)**2)**0.5
-        X1 /= D
-        Y1 /= D
-        X2 /= D
-        Y2 /= D
-        X = (X1 + X2) * 0.5
-        Y = (Y1 + Y2) * 0.5
+        D = (((X1 - X2)*640)**2 + ((Y1 - Y2)*480)**2)**0.5
+        D = 1
+        X = ((X1 + X2) * 0.5) / D
+        Y = ((Y1 + Y2) * 0.5) / D
         XX = X*X
         YY = Y*Y
         XY = X*Y
@@ -232,13 +230,10 @@ def make_model(cal_pt_cloud,n=7):
 def make_map_function_two_glints(cx, cy, n):
     if n==10:
         def fn((X1, Y1, X2, Y2)):
-            D = ((X1 - X2)**2 + (Y1 - Y2)**2)**0.5
-            X1 /= D
-            Y1 /= D
-            X2 /= D
-            Y2 /= D
-            X = (X1 + X2) * 0.5
-            Y = (Y1 + Y2) * 0.5
+            D = (((X1 - X2)*640)**2 + ((Y1 - Y2)*480)**2)**0.5
+            D = 1
+            X = ((X1 + X2) * 0.5) / D
+            Y = ((Y1 + Y2) * 0.5) / D
             x2 = cx[0]*X + cx[1]*Y + cx[2]*X*X + cx[3]*Y*Y + cx[4]*X*Y + cx[5]*X*X*X + cx[6]*Y*Y*Y + cx[7]*X*X*Y + cx[8]*Y*Y*X + cx[9]
             y2 = cy[0]*X + cy[1]*Y + cy[2]*X*X + cy[3]*Y*Y + cy[4]*X*Y + cy[5]*X*X*X + cy[6]*Y*Y*Y + cy[7]*X*X*Y + cy[8]*Y*Y*X + cy[9]
             return x2, y2
