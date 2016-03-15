@@ -3,7 +3,7 @@
  Pupil - eye tracking platform
  Copyright (C) 2012-2015  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0) License.
+ Distributed under the terms of the CC BY-NC-SA License.
  License details are in the file license.txt, distributed as part of this software.
 ----------------------------------------------------------------------------------~(*)
 '''
@@ -407,13 +407,21 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         if self._window:
             self.gl_display_in_window()
 
+    def draw_rect(self, x, y, width, height):
+        gl.glBegin(gl.GL_QUADS)                               # start drawing a rectangle
+        gl.glVertex2f(x, y)                                   # bottom left point
+        gl.glVertex2f(x + width, y)                           # bottom right point
+        gl.glVertex2f(x + width, y + height)                  # top right point
+        gl.glVertex2f(x, y + height)                          # top left point
+        gl.glEnd()
+
 
     def gl_display_in_window(self):
         active_window = glfwGetCurrentContext()
         glfwMakeContextCurrent(self._window)
-
         clear_gl_screen()
-
+        gl.glColor3f(.85, .85, .85)
+        self.draw_rect(0, 0, 2000, 2000)
         hdpi_factor = glfwGetFramebufferSize(self._window)[0]/glfwGetWindowSize(self._window)[0]
         r = 110*self.marker_scale * hdpi_factor
         gl.glMatrixMode(gl.GL_PROJECTION)
