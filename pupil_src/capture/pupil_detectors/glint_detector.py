@@ -15,7 +15,7 @@ import numpy as np
 from methods import *
 
 from glfw import *
-from template import Pupil_Detector
+#from template import Pupil_Detector
 
 # gui
 from pyglui import ui
