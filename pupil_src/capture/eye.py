@@ -279,6 +279,8 @@ def eye(pupil_queue, timebase, pipe_to_world, is_alive_flag, user_dir, version, 
 
         # let detector add its GUI
         g_pool.pupil_detector.init_gui(g_pool.sidebar)
+        # let glint detector add its GUI
+        glint_detector.init_gui(g_pool.sidebar)
         # let the camera add its GUI
         g_pool.capture.init_gui(g_pool.sidebar)
 
