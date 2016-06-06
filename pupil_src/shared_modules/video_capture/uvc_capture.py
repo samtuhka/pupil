@@ -1,9 +1,9 @@
 '''
 (*)~----------------------------------------------------------------------------------
  Pupil - eye tracking platform
- Copyright (C) 2012-2015  Pupil Labs
+ Copyright (C) 2012-2016  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0) License.
+ Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
  License details are in the file license.txt, distributed as part of this software.
 ----------------------------------------------------------------------------------~(*)
 '''
@@ -11,13 +11,13 @@
 import uvc
 from uvc import device_list,is_accessible
 #check versions for our own depedencies as they are fast-changing
-assert uvc.__version__ >= '0.5'
+assert uvc.__version__ >= '0.6'
 
 from fake_capture import Fake_Capture
 
 from ctypes import c_double
 from pyglui import ui
-from time import time
+from time import time,sleep
 #logging
 import logging
 logger = logging.getLogger(__name__)
@@ -54,25 +54,39 @@ class Camera_Capture(object):
     def re_init_capture(self,uid):
         current_size = self.capture.frame_size
         current_fps = self.capture.frame_rate
-
         self.capture = None
-        #recreate the bar with new values
-        menu_conf = self.menu.configuration
+        if self.menu:
+            #recreate the bar with new values
+            menu_conf = self.menu.configuration
+        else:
+            menu_conf = None
         self.deinit_gui()
         self.init_capture(uid)
         self.frame_size = current_size
         self.frame_rate = current_fps
-        self.init_gui(self.sidebar)
-        self.menu.configuration = menu_conf
+        if menu_conf:
+            self.init_gui(self.sidebar)
+            self.menu.configuration = menu_conf
 
+    def _re_init_capture_by_name(self,name):
+        for x in range(4):
+            devices = device_list()
+            for d in devices:
+                if d['name'] == name:
+                    logger.info("Found device.%s."%name)
+                    self.re_init_capture(d['uid'])
+                    return
+            logger.warning('Could not find Camera %s during re initilization.'%name)
+            sleep(1.5)
+        raise CameraCaptureError('Could not find Camera %s during re initilization.'%name)
 
     def init_capture(self,uid):
         self.uid = uid
 
-        if uid is not None:
-            self.capture = uvc.Capture(uid)
-        else:
+        if uid is None:
             self.capture = Fake_Capture()
+        else:
+            self.capture = uvc.Capture(uid)
 
         if 'C930e' in self.capture.name:
                 logger.debug('Timestamp offset for c930 applied: -0.1sec')
@@ -93,8 +107,13 @@ class Camera_Capture(object):
             if "ID0" in self.capture.name or "ID1" in self.capture.name:
                 self.capture.bandwidth_factor = 1.3
                 try:
-                    controls_dict['Auto Exposure Priority'].value = 1
+                    controls_dict['Auto Exposure Priority'].value = 0
                 except KeyError:
+                    pass
+                try:
+                    # print controls_dict['Auto Exposure Mode'].value
+                    controls_dict['Auto Exposure Mode'].value = 1
+                except KeyError as e:
                     pass
                 try:
                     controls_dict['Saturation'].value = 0
@@ -104,6 +123,22 @@ class Camera_Capture(object):
                     controls_dict['Absolute Exposure Time'].value = 63
                 except KeyError:
                     pass
+                try:
+                    controls_dict['Backlight Compensation'].value = 2
+                except KeyError:
+                    pass
+                try:
+                    controls_dict['Gamma'].value = 100
+                except KeyError:
+                    pass
+            else:
+                self.capture.bandwidth_factor = 1.8
+                try:
+                    controls_dict['Auto Exposure Priority'].value = 1
+                except KeyError:
+                    pass
+        if "C525" in self.capture.name or  "B525" in self.capture.name or "C920" in self.capture.name:
+            self.capture.bandwidth_factor = 4.0
             try:
                 controls_dict['Auto Focus'].value = 0
             except KeyError:
@@ -112,8 +147,12 @@ class Camera_Capture(object):
     def get_frame(self):
         try:
             frame = self.capture.get_frame_robust()
-        except:
-            raise CameraCaptureError("Could not get frame from %s"%self.uid)
+        except uvc.CaptureError as e:
+            try:
+                self._re_init_capture_by_name(self.capture.name)
+                frame = self.capture.get_frame_robust()
+            except uvc.CaptureError as e:
+                raise CameraCaptureError("Could not get frame from %s"%self.uid)
 
         timestamp = self.get_now()+self.ts_offset
         timestamp -= self.timebase.value
@@ -158,7 +197,7 @@ class Camera_Capture(object):
             try:
                 c.value = settings['uvc_controls'][c.display_name]
             except KeyError as e:
-                logger.info('No UVC setting "%s" found from settings.'%c.display_name)
+                logger.debug('No UVC setting "%s" found from settings.'%c.display_name)
     @property
     def frame_size(self):
         return self.capture.frame_size
@@ -171,6 +210,9 @@ class Camera_Capture(object):
         if size != new_size:
             logger.warning("%s resolution capture mode not available. Selected %s."%(new_size,size))
         self.capture.frame_size = size
+
+        if hasattr(self,'on_frame_size_change'):
+            self.on_frame_size_change(size)
 
     @property
     def name(self):
@@ -224,7 +266,7 @@ class Camera_Capture(object):
         cameras = uvc.device_list()
         camera_names = ['Fake Capture']+[c['name'] for c in cameras]
         camera_ids = [None]+[c['uid'] for c in cameras]
-        self.menu.append(ui.Selector('uid',self,selection=camera_ids,labels=camera_names,label='Capture Device', setter=gui_init_cam_by_uid) )
+        self.menu.append(ui.Selector('uid',self,selection=camera_ids,labels=camera_names,label='Capture device', setter=gui_init_cam_by_uid) )
 
         sensor_control = ui.Growing_Menu(label='Sensor Settings')
         sensor_control.append(ui.Info_Text("Do not change these during calibration or recording!"))
@@ -233,7 +275,7 @@ class Camera_Capture(object):
         image_processing.collapsed=True
 
         sensor_control.append(ui.Selector('frame_size',self,setter=set_size, selection=self.capture.frame_sizes,label='Resolution' ) )
-        sensor_control.append(ui.Selector('frame_rate',self, selection=self.capture.frame_rates,label='Framerate' ) )
+        sensor_control.append(ui.Selector('frame_rate',self, selection=self.capture.frame_rates,label='Frame rate' ) )
 
 
         for control in self.capture.controls:
@@ -284,6 +326,5 @@ class Camera_Capture(object):
         self.deinit_gui()
         # self.capture.close()
         del self.capture
-        logger.info("Capture released")
 
 

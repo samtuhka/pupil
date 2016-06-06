@@ -1,9 +1,9 @@
 '''
 (*)~----------------------------------------------------------------------------------
  Pupil - eye tracking platform
- Copyright (C) 2012-2015  Pupil Labs
+ Copyright (C) 2012-2016  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0) License.
+ Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
  License details are in the file license.txt, distributed as part of this software.
 ----------------------------------------------------------------------------------~(*)
 '''
@@ -51,6 +51,7 @@ class Trim_Marks(Plugin):
 
     def set(self,mark_range):
         self._in_mark,self._out_mark = mark_range
+
 
     def get_string(self):
         return '%s - %s'%(self._in_mark,self._out_mark)

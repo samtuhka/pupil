@@ -3,7 +3,8 @@
 
 import platform
 
-av_hidden_imports = ['av.format','av.packet','av.frame','av.stream','av.plane','av.audio.plane','av.audio.stream','av.subtitles','av.subtitles.stream','av.subtitles.subtitle','av.video.reformatter','av.video.plane']
+av_hidden_imports = ['av.format','av.packet','av.buffer','av.bytesource','av.frame','av.stream','av.descriptor','av.plane','av.audio.plane','av.container.streams','av.dictionary', 'av.audio.stream','av.subtitles','av.subtitles.stream','av.subtitles.subtitle','av.video.reformatter','av.video.plane','av.option']
+pyglui_hidden_imports = ['pyglui.pyfontstash.fontstash','pyglui.cygl.shader','pyglui.cygl.utils']
 
 
 if platform.system() == 'Darwin':
@@ -11,7 +12,7 @@ if platform.system() == 'Darwin':
 
     a = Analysis(['../pupil_src/player/main.py'],
                  pathex=['../pupil_src/shared_modules/'],
-                 hiddenimports=['pyglui.pyfontstash.fontstash','pyglui.cygl.shader','pyglui.cygl.utils']+av_hidden_imports,
+                 hiddenimports=[]+av_hidden_imports+pyglui_hidden_imports,
                  hookspath=None,
                  runtime_hooks=None,
                  excludes=['pyx_compiler','matplotlib'])
@@ -32,7 +33,7 @@ if platform.system() == 'Darwin':
                    a.binaries - libSystem,
                    a.zipfiles,
                    a.datas,
-                   [('libglfw3.dylib', '/usr/local/Cellar/glfw3/3.1.1/lib/libglfw3.dylib','BINARY')],                   [('methods.so', '../pupil_src/shared_modules/c_methods/methods.so','BINARY')],
+                   [('libglfw3.dylib', '/usr/local/Cellar/glfw3/3.1.2/lib/libglfw3.dylib','BINARY')],
                    [('OpenSans-Regular.ttf','/usr/local/lib/python2.7/site-packages/pyglui/OpenSans-Regular.ttf','DATA')],
                    [('Roboto-Regular.ttf','/usr/local/lib/python2.7/site-packages/pyglui/Roboto-Regular.ttf','DATA')],
                    strip=None,
@@ -47,7 +48,7 @@ if platform.system() == 'Darwin':
 elif platform.system() == 'Linux':
     a = Analysis(['../pupil_src/player/main.py'],
                  pathex=['../pupil_src/shared_modules/'],
-                 hiddenimports=['pyglui.pyfontstash.fontstash','pyglui.cygl.shader','pyglui.cygl.utils']+av_hidden_imports,
+                 hiddenimports=[]+av_hidden_imports+pyglui_hidden_imports,
                  hookspath=None,
                  runtime_hooks=None,
                  excludes=['pyx_compiler','matplotlib'])
@@ -74,7 +75,6 @@ elif platform.system() == 'Linux':
                    binaries,
                    a.zipfiles,
                    a.datas,
-                   [('methods.so', '../pupil_src/shared_modules/c_methods/methods.so','BINARY')],
                    [('libglfw.so', '/usr/local/lib/libglfw.so','BINARY')],
                    [('OpenSans-Regular.ttf','/usr/local/lib/python2.7/dist-packages/pyglui/OpenSans-Regular.ttf','DATA')],
                    [('Roboto-Regular.ttf','/usr/local/lib/python2.7/dist-packages/pyglui/Roboto-Regular.ttf','DATA')],
@@ -98,7 +98,7 @@ elif platform.system() == 'Windows':
 			lib_dir = os.path.abspath(os.path.join(path, os.path.pardir))
 			python_path = os.path.abspath(os.path.join(lib_dir, os.path.pardir))
 			package_path = path
-	if (python_path and package_path):	
+	if (python_path and package_path):
 		print "PYTHON PATH @ " + python_path
 		print "PACKAGE PATH @ " + package_path
 	else:
@@ -132,7 +132,6 @@ elif platform.system() == 'Windows':
 	               a.binaries,
 	               a.zipfiles,
 	               a.datas,
-	               [('methods.so', '../pupil_src/shared_modules/c_methods/methods.so','BINARY')],
 	               [('glfw3.dll', '../pupil_src/shared_modules/external/glfw3.dll','BINARY')],
 	               [('glfw3.lib', '../pupil_src/shared_modules/external/glfw3.lib','BINARY')],
 	               [('glfw3dll.lib', '../pupil_src/shared_modules/external/glfw3dll.lib','BINARY')],

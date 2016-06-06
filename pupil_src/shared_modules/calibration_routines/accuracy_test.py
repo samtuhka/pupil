@@ -1,9 +1,9 @@
 '''
 (*)~----------------------------------------------------------------------------------
  Pupil - eye tracking platform
- Copyright (C) 2012-2015  Pupil Labs
+ Copyright (C) 2012-2016  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0) License.
+ Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
  License details are in the file license.txt, distributed as part of this software.
 ----------------------------------------------------------------------------------~(*)
 '''
@@ -21,7 +21,6 @@ from gl_utils import adjust_gl_view,clear_gl_screen,basic_gl_setup
 import OpenGL.GL as gl
 from glfw import *
 import calibrate
-from circle_detector import get_candidate_ellipses
 from file_methods import Persistent_Dict
 from time import time
 
@@ -34,7 +33,7 @@ from pyglui.pyfontstash import fontstash
 from pyglui.ui import get_opensans_font_path
 from plugin import Calibration_Plugin
 from screen_marker_calibration import Screen_Marker_Calibration
-from calibrate import preprocess_data
+import calibrate
 #logging
 import logging
 logger = logging.getLogger(__name__)
@@ -137,7 +136,7 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
                         (.5,.5),(.5,.5)]
         self.sites = np.random.random((10,2)).tolist() + self.sites
         self.changeSitesCloseToWheel()
-        self.active_site = 0
+        self.active_site = self.sites.pop(0)
         self.active = True
         self.ref_list = []
         self.pupil_list = [] #we dont use it only here becasue we use update fn from parent
@@ -164,8 +163,9 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
         self.active = False
         self.close_window()
         refList = np.array(self.ref_list)
-        pt_cloud = preprocess_data(self.gaze_list,self.ref_list)
 
+        matched_data = calibrate.closest_matches_monocular(self.gaze_list,self.ref_list)
+        pt_cloud = calibrate.preprocess_2d_data_monocular(matched_data)
         logger.info("Collected %s data points." %len(pt_cloud))
 
         if len(pt_cloud) < 20:
@@ -204,9 +204,6 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
         # test world cam resolution
         if self.pt_cloud is None:
             logger.warning("Please run test first!")
-            return
-
-        if self.g_pool.capture.frame_size == None:
             return
 
         pt_cloud = self.pt_cloud.copy()

@@ -1,17 +1,18 @@
 '''
 (*)~----------------------------------------------------------------------------------
  Pupil - eye tracking platform
- Copyright (C) 2012-2015  Pupil Labs
+ Copyright (C) 2012-2016  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0) License.
+ Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
  License details are in the file license.txt, distributed as part of this software.
 ----------------------------------------------------------------------------------~(*)
 '''
 
 import os,sys
 import av
+assert av.__version__ >= '0.2.5'
 
-assert av.__version__ >= '0.2.4'
+av.logging.set_level(av.logging.ERROR)
 
 import numpy as np
 from time import time,sleep
@@ -85,6 +86,8 @@ class File_Capture(object):
         self.display_time = 0.
         self.target_frame_idx = 0
 
+
+        self.slowdown = 0.0
         assert os.path.isfile(src)
         self.src = src
 
@@ -212,6 +215,7 @@ class File_Capture(object):
             if 1 > wait_time > 0 :
                 sleep(wait_time)
         self.display_time = frame.timestamp - time()
+        sleep(self.slowdown)
 
     def get_frame(self):
         frame = self.get_frame_nowait()
@@ -220,10 +224,14 @@ class File_Capture(object):
 
     def seek_to_frame(self, seek_pos):
         ###frame accurate seeking
-        self.video_stream.seek(self.idx_to_pts(seek_pos),mode='time')
-        self.next_frame = self._next_frame()
-        self.display_time = 0
-        self.target_frame_idx = seek_pos
+        try:
+            self.video_stream.seek(self.idx_to_pts(seek_pos),mode='time')
+        except av.AVError as e:
+            raise FileSeekError()
+        else:
+            self.next_frame = self._next_frame()
+            self.display_time = 0
+            self.target_frame_idx = seek_pos
 
     def seek_to_frame_fast(self, seek_pos):
         ###best effort seeking to closest keyframe
@@ -237,8 +245,8 @@ class File_Capture(object):
 
     def get_now(self):
         try:
-            timestamp = self.timestamps[self.get_frame_index()]
-            logger.warning("Filecapture is not a realtime source. -NOW- will be the current timestamp")
+            timestamp = self.timestamps[self.get_frame_index()-1]
+            logger.debug("Filecapture is not a realtime source. -NOW- will be the current timestamp")
         except IndexError:
             logger.warning("timestamp not found.")
             timestamp = 0
@@ -250,6 +258,7 @@ class File_Capture(object):
     def init_gui(self,sidebar):
         self.menu = ui.Growing_Menu(label='File Capture Settings')
         self.menu.append(ui.Info_Text("Running Capture with '%s' as src"%self.src))
+        self.menu.append(ui.Slider('slowdown',self,min=0,max=1.0))
         self.sidebar = sidebar
         self.sidebar.append(self.menu)
 

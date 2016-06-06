@@ -1,9 +1,9 @@
 '''
 (*)~----------------------------------------------------------------------------------
  Pupil - eye tracking platform
- Copyright (C) 2012-2015  Pupil Labs
+ Copyright (C) 2012-2016  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0) License.
+ Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
  License details are in the file license.txt, distributed as part of this software.
 ----------------------------------------------------------------------------------~(*)
 '''
@@ -13,12 +13,11 @@ from plugin import Plugin
 import numpy as np
 from pyglui import ui
 import zmq
-
+import json
 
 
 import logging
 logger = logging.getLogger(__name__)
-
 
 
 class Pupil_Server(Plugin):
@@ -28,11 +27,10 @@ class Pupil_Server(Plugin):
         self.order = .9
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PUB)
-        self.address = ''
+        self.address = address
         self.set_server(address)
         self.menu = None
 
-        self.exclude_list = ['ellipse','pos_in_roi','major','minor','axes','angle','center']
 
     def init_gui(self):
         if self.g_pool.app == 'capture':
@@ -60,38 +58,27 @@ class Pupil_Server(Plugin):
     def set_server(self,new_address):
         try:
             self.socket.unbind(self.address)
+        except Exception as e:
+            logger.error(e)
+        else:
             logger.debug('Detached from %s'%self.address)
-        except:
-            pass
         try:
             self.socket.bind(new_address)
+        except zmq.ZMQError as e:
+            logger.error("Could not set Socket: %s. Reason: %s"%(new_address,e))
+        else:
             self.address = new_address
             logger.debug('Bound to %s'%self.address)
 
-        except zmq.ZMQError as e:
-            logger.error("Could not set Socket: %s. Reason: %s"%(new_address,e))
+
 
     def update(self,frame,events):
-        for p in events.get('pupil_positions',[]):
-            msg = "Pupil\n"
-            for key,value in p.iteritems():
-                if key not in self.exclude_list:
-                    msg +=key+":"+str(value)+'\n'
-            self.socket.send( msg )
-
-        for g in events.get('gaze_positions',[]):
-            msg = "Gaze\n"
-            for key,value in g.iteritems():
-                if key not in self.exclude_list:
-                    msg +=key+":"+str(value)+'\n'
-            self.socket.send( msg )
-
-        # for e in events:
-        #     msg = 'Event'+'\n'
-        #     for key,value in e.iteritems():
-        #         if key not in self.exclude_list:
-        #             msg +=key+":"+str(value).replace('\n','')+'\n'
-        #     self.socket.send( msg )
+        for topic,data in events.iteritems():
+            if type(data) in (tuple,list):
+                for d in data:
+                    self.socket.send_multipart((topic, json.dumps(d)))
+            else:
+                self.socket.send_multipart((topic, json.dumps(data)))
 
     def close(self):
         self.alive = False

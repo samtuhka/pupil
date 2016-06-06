@@ -1,14 +1,17 @@
 '''
 (*)~----------------------------------------------------------------------------------
  Pupil - eye tracking platform
- Copyright (C) 2012-2015  Pupil Labs
+ Copyright (C) 2012-2016  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0) License.
+ Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
  License details are in the file license.txt, distributed as part of this software.
 ----------------------------------------------------------------------------------~(*)
 '''
 
 import numpy as np
+import cv2
+
+from methods import undistort_unproject_pts
 #logging
 import logging
 logger = logging.getLogger(__name__)
@@ -16,19 +19,18 @@ import statsmodels.api as sm
 import math
 
 
-def get_map_from_cloud(cal_pt_cloud,screen_size=(2,2),threshold = 35,return_inlier_map=False,return_params=False, binocular=False, glint=False):
+def calibrate_2d_polynomial(cal_pt_cloud,screen_size=(2,2),threshold = 35, binocular=False):
     """
     we do a simple two pass fitting to a pair of bi-variate polynomials
     return the function to map vector
     """
     # fit once using all avaiable data
     model_n = 7
-    if glint:
-        model_n = 10
     if binocular:
         model_n = 13
-        if glint:
-            model_n = 19
+
+    cal_pt_cloud = np.array(cal_pt_cloud)
+
     cx,cy,err_x,err_y = fit_poly_surface(cal_pt_cloud,model_n)
     err_dist,err_mean,err_rms = fit_error_screen(err_x,err_y,screen_size)
     if cal_pt_cloud[err_dist<=threshold].shape[0]: #did not disregard all points..
@@ -44,29 +46,17 @@ def get_map_from_cloud(cal_pt_cloud,screen_size=(2,2),threshold = 35,return_inli
             %(cal_pt_cloud[err_dist<=threshold].shape[0], cal_pt_cloud.shape[0], \
             100*float(cal_pt_cloud[err_dist<=threshold].shape[0])/cal_pt_cloud.shape[0]))
 
-        if return_inlier_map and return_params:
-            return map_fn,err_dist<=threshold,(cx,cy,model_n)
-        if return_inlier_map and not return_params:
-            return map_fn,err_dist<=threshold
-        if return_params and not return_inlier_map:
-            return map_fn,(cx,cy,model_n)
-        return map_fn
+        return map_fn,err_dist<=threshold,(cx,cy,model_n)
+
     else: # did disregard all points. The data cannot be represented by the model in a meaningful way:
         map_fn = make_map_function(cx,cy,model_n)
         logger.info('First iteration. root-mean-square residuals: %s in pixel, this is bad!'%err_rms)
         logger.warning('The data cannot be represented by the model in a meaningfull way.')
-
-        if return_inlier_map and return_params:
-            return map_fn,err_dist<=threshold,(cx,cy,model_n)
-        if return_inlier_map and not return_params:
-            return map_fn,err_dist<=threshold
-        if return_params and not return_inlier_map:
-            return map_fn,(cx,cy,model_n)
-        return map_fn
+        return map_fn,err_dist<=threshold,(cx,cy,model_n)
 
 
 
-def fit_poly_surface_old(cal_pt_cloud,n=7):
+def fit_poly_surface(cal_pt_cloud,n=7):
     M = make_model(cal_pt_cloud,n)
     U,w,Vt = np.linalg.svd(M[:,:n],full_matrices=0)
     V = Vt.transpose()
@@ -79,7 +69,7 @@ def fit_poly_surface_old(cal_pt_cloud,n=7):
     err_y=(np.dot(M[:,:n],cy)-M[:,n+1])
     return cx,cy,err_x,err_y
 
-def fit_poly_surface(cal_pt_cloud,n=7):
+def fit_poly_surface_alternative(cal_pt_cloud,n=7):
     M = make_model(cal_pt_cloud,n)
     rlmX = sm.RLM(M[:,n], M[:,:n]).fit()
     rlmY = sm.RLM(M[:,n+1], M[:,:n]).fit()
@@ -92,6 +82,14 @@ def fit_poly_surface(cal_pt_cloud,n=7):
 def fit_error_screen(err_x,err_y,(screen_x,screen_y)):
     err_x *= screen_x/2.
     err_y *= screen_y/2.
+    err_dist=np.sqrt(err_x*err_x + err_y*err_y)
+    err_mean=np.sum(err_dist)/len(err_dist)
+    err_rms=np.sqrt(np.sum(err_dist*err_dist)/len(err_dist))
+    return err_dist,err_mean,err_rms
+
+def fit_error_angle(err_x,err_y ) :
+    err_x *= 2. * np.pi
+    err_y *= 2. * np.pi
     err_dist=np.sqrt(err_x*err_x + err_y*err_y)
     err_mean=np.sum(err_dist)/len(err_dist)
     err_rms=np.sqrt(np.sum(err_dist*err_dist)/len(err_dist))
@@ -129,6 +127,21 @@ def make_model(cal_pt_cloud,n=7):
         ZX=cal_pt_cloud[:,2]
         ZY=cal_pt_cloud[:,3]
         M=np.array([X,Y,XX,YY,XY,XXYY,Ones,ZX,ZY]).transpose()
+
+    elif n==9:
+        X=cal_pt_cloud[:,0]
+        Y=cal_pt_cloud[:,1]
+        XX=X*X
+        YY=Y*Y
+        XY=X*Y
+        XXYY=XX*YY
+        XXY=XX*Y
+        YYX=YY*X
+        Ones=np.ones(n_points)
+        ZX=cal_pt_cloud[:,2]
+        ZY=cal_pt_cloud[:,3]
+        M=np.array([X,Y,XX,YY,XY,XXYY,XXY,YYX,Ones,ZX,ZY]).transpose()
+
 
     elif n==10:
         X1=cal_pt_cloud[:,0]
@@ -265,6 +278,14 @@ def make_map_function(cx,cy,n):
             y2 = cy[0]*X + cy[1]*Y + cy[2]*X*X + cy[3]*Y*Y + cy[4]*X*Y + cy[5]*Y*Y*X*X +cy[6]
             return x2,y2
 
+    elif n==9:
+        def fn((X,Y)):
+            #          X         Y         XX         YY         XY         XXYY         XXY         YYX         Ones
+            x2 = cx[0]*X + cx[1]*Y + cx[2]*X*X + cx[3]*Y*Y + cx[4]*X*Y + cx[5]*Y*Y*X*X + cx[6]*Y*X*X + cx[7]*Y*Y*X + cx[8]
+            y2 = cy[0]*X + cy[1]*Y + cy[2]*X*X + cy[3]*Y*Y + cy[4]*X*Y + cy[5]*Y*Y*X*X + cy[6]*Y*X*X + cy[7]*Y*Y*X + cy[8]
+            return x2,y2
+
+
     elif n==10:
         def fn((X,Y)):
             #          X         Y         XX         YY         XY         XXYY         XXY         YYX         Ones
@@ -285,6 +306,7 @@ def make_map_function(cx,cy,n):
             x2 = cx[0]*X0 + cx[1]*Y0 + cx[2]*X1 + cx[3]*Y1 + cx[4]*X0*X0 + cx[5]*Y0*Y0 + cx[6]*X0*Y0 + cx[7]*X0*X0*Y0*Y0 + cx[8]*X1*X1 + cx[9]*Y1*Y1 + cx[10]*X1*Y1 + cx[11]*X1*X1*Y1*Y1 + cx[12]*X0*X1 + cx[13]*X0*Y1 + cx[14]*Y0*X1 + cx[15]*Y0*Y1 + cx[16]
             y2 = cy[0]*X0 + cy[1]*Y0 + cy[2]*X1 + cy[3]*Y1 + cy[4]*X0*X0 + cy[5]*Y0*Y0 + cy[6]*X0*Y0 + cy[7]*X0*X0*Y0*Y0 + cy[8]*X1*X1 + cy[9]*Y1*Y1 + cy[10]*X1*Y1 + cy[11]*X1*X1*Y1*Y1 + cy[12]*X0*X1 + cy[13]*X0*Y1 + cy[14]*Y0*X1 + cy[15]*Y0*Y1 + cy[16]
             return x2,y2
+
     elif n==19:
         def fn((X1_0, Y1_0, X2_0, Y2_0),(X1_1, Y1_1, X2_1, Y2_1)):
             x2 = cx[0]*X1_0 + cx[1]*Y1_0 + cx[2]*X1_1 + cx[3]*Y1_1 + cx[4]*X2_0 + cx[5]*Y2_0 + cx[6]*X2_1 + cx[7]*Y2_1 + cx[8]*X1_0*X2_0 + cx[9]*Y1_0*Y2_0 + cx[10]*X1_0*Y1_0 + cx[11]*X2_0*Y2_0 + cx[12]*X1_0*X2_0*Y1_0*Y2_0 + cx[13]*X1_1*X2_1 + cx[14]*Y1_1*Y2_1 + cx[15]*X1_1*Y1_1 + cx[16]*X2_1*Y2_1 + cx[17]*X1_1*X2_1*Y1_1*Y2_1 + cx[18]
@@ -294,6 +316,86 @@ def make_map_function(cx,cy,n):
         raise Exception("ERROR: Model n needs to be 3, 5, 7 or 9")
 
     return fn
+
+
+def closest_matches_binocular(ref_pts, pupil_pts,max_dispersion=1/15.):
+    '''
+    get pupil positions closest in time to ref points.
+    return list of dict with matching ref, pupil0 and pupil1 data triplets.
+    '''
+    ref = ref_pts
+
+    pupil0 = [p for p in pupil_pts if p['id']==0]
+    pupil1 = [p for p in pupil_pts if p['id']==1]
+
+    pupil0_ts = np.array([p['timestamp'] for p in pupil0])
+    pupil1_ts = np.array([p['timestamp'] for p in pupil1])
+
+
+    def find_nearest_idx(array,value):
+        idx = np.searchsorted(array, value, side="left")
+        try:
+            if abs(value - array[idx-1]) < abs(value - array[idx]):
+                return idx-1
+            else:
+                return idx
+        except IndexError:
+            return idx-1
+
+    matched = []
+
+    if pupil0 and pupil1:
+        for r in ref_pts:
+            closest_p0_idx = find_nearest_idx(pupil0_ts,r['timestamp'])
+            closest_p0 = pupil0[closest_p0_idx]
+            closest_p1_idx = find_nearest_idx(pupil1_ts,r['timestamp'])
+            closest_p1 = pupil1[closest_p1_idx]
+
+            dispersion = max(closest_p0['timestamp'],closest_p1['timestamp'],r['timestamp']) - min(closest_p0['timestamp'],closest_p1['timestamp'],r['timestamp'])
+            if dispersion < max_dispersion:
+                matched.append({'ref':r,'pupil':closest_p0, 'pupil1':closest_p1})
+            else:
+                print "to far."
+    return matched
+
+
+def closest_matches_monocular(ref_pts, pupil_pts,max_dispersion=1/15.):
+    '''
+
+    get pupil positions closest in time to ref points.
+    return list of dict with matching ref and pupil datum.
+
+    if your data is binocular use:
+    pupil0 = [p for p in pupil_pts if p['id']==0]
+    pupil1 = [p for p in pupil_pts if p['id']==1]
+    to get the desired eye and pass it as pupil_pts
+    '''
+
+    ref = ref_pts
+    pupil0 = pupil_pts
+    pupil0_ts = np.array([p['timestamp'] for p in pupil0])
+
+    def find_nearest_idx(array,value):
+        idx = np.searchsorted(array, value, side="left")
+        try:
+            if abs(value - array[idx-1]) < abs(value - array[idx]):
+                return idx-1
+            else:
+                return idx
+        except IndexError:
+            return idx-1
+
+    matched = []
+    if pupil0:
+        for r in ref_pts:
+            closest_p0_idx = find_nearest_idx(pupil0_ts,r['timestamp'])
+            closest_p0 = pupil0[closest_p0_idx]
+            dispersion = max(closest_p0['timestamp'],r['timestamp']) - min(closest_p0['timestamp'],r['timestamp'])
+            if dispersion < max_dispersion:
+                matched.append({'ref':r,'pupil':closest_p0})
+            else:
+                pass
+    return matched
 
 
 def preprocess_data(pupil_pts,ref_pts,id_filter=(0,), glints=False):
@@ -493,101 +595,179 @@ def preprocess_data_binocular_glint(pupil_pts, ref_pts):
     return cal_data
 
 
-
-def preprocess_data_interpol(pupil_glint_pts, glint_pts):
-    cal_data =[]
-    if len(glint_pts)<=20:
-        return cal_data
-    pupil = []
-    for i in range(len(glint_pts)):
-        x = pupil_glint_pts[i]['x'] + glint_pts[i][3]
-        y = pupil_glint_pts[i]['y'] + glint_pts[i][4]
-        pt = x, y
-        pupil.append(pt)
-    pupil = np.array(pupil)
-    glint = np.array(glint_pts)
-    n_points = pupil.shape[0]
-    X=pupil[:,0]
-    Y=pupil[:,1]
-    Ones=np.ones(n_points)
-    ZX=glint[:,3]
-    ZY=glint[:,4]
-    cal_data=np.array([X,Y, Ones,ZX,ZY]).transpose()
+def preprocess_2d_data_monocular(matched_data):
+    cal_data = []
+    for pair in matched_data:
+        ref,pupil = pair['ref'],pair['pupil']
+        cal_data.append( (pupil["norm_pos"][0], pupil["norm_pos"][1],ref['norm_pos'][0],ref['norm_pos'][1]) )
     return cal_data
 
+def preprocess_2d_data_binocular(matched_data):
+    cal_data = []
+    for triplet in matched_data:
+        ref,p0,p1 = triplet['ref'],triplet['pupil'],triplet['pupil1']
+        data_pt = p0["norm_pos"][0], p0["norm_pos"][1],p1["norm_pos"][0], p1["norm_pos"][1],ref['norm_pos'][0],ref['norm_pos'][1]
+        cal_data.append( data_pt )
+    return cal_data
 
-# if __name__ == '__main__':
-#     import matplotlib.pyplot as plt
-#     from matplotlib import cm
-#     from mpl_toolkits.mplot3d import Axes3D
+def preprocess_3d_data(matched_data, camera_intrinsics ):
+    camera_matrix = camera_intrinsics["camera_matrix"]
+    dist_coefs = camera_intrinsics["dist_coefs"]
 
-#     cal_pt_cloud = np.load('cal_pt_cloud.npy')
-#     # plot input data
-#     # Z = cal_pt_cloud
-#     # ax.scatter(Z[:,0],Z[:,1],Z[:,2], c= "r")
-#     # ax.scatter(Z[:,0],Z[:,1],Z[:,3], c= "b")
+    ref_processed = []
+    pupil0_processed = []
+    pupil1_processed = []
 
-#     # fit once
-#     model_n = 7
-#     cx,cy,err_x,err_y = fit_poly_surface(cal_pt_cloud,model_n)
-#     map_fn = make_map_function(cx,cy,model_n)
-#     err_dist,err_mean,err_rms = fit_error_screen(err_x,err_y,(1280,720))
-#     print err_rms,"in pixel"
-#     threshold =15 # err_rms*2
+    is_binocular = len(matched_data[0] ) == 3
+    for data_point in matched_data:
+        try:
+            # taking the pupil normal as line of sight vector
+            pupil0 = data_point['pupil']
+            gaze_vector0 = np.array(pupil0['circle_3d']['normal'])
+            pupil0_processed.append( gaze_vector0 )
 
-#     # fit again disregarding crass outlines
-#     cx,cy,new_err_x,new_err_y = fit_poly_surface(cal_pt_cloud[err_dist<=threshold],model_n)
-#     map_fn = make_map_function(cx,cy,model_n)
-#     new_err_dist,new_err_mean,new_err_rms = fit_error_screen(new_err_x,new_err_y,(1280,720))
-#     print new_err_rms,"in pixel"
+            if is_binocular: # we have binocular data
+                pupil1 = data_point['pupil1']
+                gaze_vector1 = np.array(pupil1['circle_3d']['normal'])
+                pupil1_processed.append( gaze_vector1 )
 
-#     print "using %i datapoints out of the full dataset %i: subset is %i percent" \
-#         %(cal_pt_cloud[err_dist<=threshold].shape[0], cal_pt_cloud.shape[0], \
-#         100*float(cal_pt_cloud[err_dist<=threshold].shape[0])/cal_pt_cloud.shape[0])
+            # projected point uv to normal ray vector of camera
+            ref = data_point['ref']
+            ref_vector =  undistort_unproject_pts(ref['screen_pos'] , camera_matrix, dist_coefs).tolist()[0]
+            ref_vector = ref_vector / np.linalg.norm(ref_vector)
+            # assuming a fixed (assumed) distance we get a 3d point in world camera 3d coords.
+            ref_processed.append( np.array(ref_vector) )
 
-#     # plot residuals
-#     fig_error = plt.figure()
-#     plt.scatter(err_x,err_y,c="y")
-#     plt.scatter(new_err_x,new_err_y)
-#     plt.title("fitting residuals full data set (y) and better subset (b)")
+        except KeyError as e:
+            # this pupil data point did not have 3d detected data.
+            pass
+
+    return ref_processed,pupil0_processed,pupil1_processed
+
+# def preprocess_3d_data_binocular(matched_data, camera_intrinsics , calibration_distance):
+
+#     camera_matrix = camera_intrinsics["camera_matrix"]
+#     dist_coefs = camera_intrinsics["dist_coefs"]
+
+#     cal_data = []
+#     for triplet in matched_data:
+#         ref,p0,p1 = triplet['ref'],triplet['pupil0'],triplet['pupil1']
+#         try:
+#             # taking the pupil normal as line of sight vector
+#             # we multiply by a fixed (assumed) distance and
+#             # add the sphere pos to get the 3d gaze point in eye camera 3d coords
+#             sphere_pos0 = np.array(p0['sphere']['center'])
+#             gaze_pt0 = np.array(p0['circle3D']['normal']) * calibration_distance + sphere_pos0
 
 
-#     # plot projection of eye and world vs observed data
-#     X,Y,ZX,ZY = cal_pt_cloud.transpose().copy()
-#     X,Y = map_fn((X,Y))
-#     X *= 1280/2.
-#     Y *= 720/2.
-#     ZX *= 1280/2.
-#     ZY *= 720/2.
-#     fig_projection = plt.figure()
-#     plt.scatter(X,Y)
-#     plt.scatter(ZX,ZY,c='y')
-#     plt.title("world space projection in pixes, mapped and observed (y)")
+#             sphere_pos1 = np.array(p1['sphere']['center'])
+#             gaze_pt1 = np.array(p1['circle3D']['normal']) * calibration_distance + sphere_pos1
 
-#     # plot the fitting functions 3D plot
-#     fig = plt.figure()
-#     ax = fig.gca(projection='3d')
-#     outliers =cal_pt_cloud[err_dist>threshold]
-#     inliers = cal_pt_cloud[err_dist<=threshold]
-#     ax.scatter(outliers[:,0],outliers[:,1],outliers[:,2], c= "y")
-#     ax.scatter(outliers[:,0],outliers[:,1],outliers[:,3], c= "y")
-#     ax.scatter(inliers[:,0],inliers[:,1],inliers[:,2], c= "r")
-#     ax.scatter(inliers[:,0],inliers[:,1],inliers[:,3], c= "b")
-#     Z = cal_pt_cloud
-#     X = np.linspace(min(Z[:,0])-.2,max(Z[:,0])+.2,num=30,endpoint=True)
-#     Y = np.linspace(min(Z[:,1])-.2,max(Z[:,1]+.2),num=30,endpoint=True)
-#     X, Y = np.meshgrid(X,Y)
-#     ZX,ZY = map_fn((X,Y))
-#     ax.plot_surface(X, Y, ZX, rstride=1, cstride=1, linewidth=.1, antialiased=True,alpha=0.4,color='r')
-#     ax.plot_surface(X, Y, ZY, rstride=1, cstride=1, linewidth=.1, antialiased=True,alpha=0.4,color='b')
-#     plt.xlabel("Pupil x in Eye-Space")
-#     plt.ylabel("Pupil y Eye-Space")
-#     plt.title("Z: Gaze x (blue) Gaze y (red) World-Space, yellow=outliers")
 
-#     # X,Y,_,_ = cal_pt_cloud.transpose()
+#             # projected point uv to normal ray vector of camera
+#             ref_vector =  undistort_unproject_pts(ref['screen_pos'] , camera_matrix, dist_coefs).tolist()[0]
+#             ref_vector = ref_vector / np.linalg.norm(ref_vector)
+#             # assuming a fixed (assumed) distance we get a 3d point in world camera 3d coords.
+#             ref_pt_3d = ref_vector*calibration_distance
 
-#     # pts= map_fn((X,Y))
-#     # import cv2
-#     # pts = np.array(pts,dtype=np.float32).transpose()
-#     # print cv2.convexHull(pts)[:,0]
-#     plt.show()
+
+#             point_triple_3d = tuple(gaze_pt0), tuple(gaze_pt1) , ref_pt_3d
+#             cal_data.append(point_triple_3d)
+#         except KeyError as e:
+#             # this pupil data point did not have 3d detected data.
+#             pass
+
+#     return cal_data
+
+# def preprocess_3d_data_binocular_gaze_direction(matched_data, camera_intrinsics , calibration_distance):
+
+#     camera_matrix = camera_intrinsics["camera_matrix"]
+#     dist_coefs = camera_intrinsics["dist_coefs"]
+
+#     cal_data = []
+#     for triplet in matched_data:
+#         ref,p0,p1 = triplet['ref'],triplet['pupil0'],triplet['pupil1']
+#         try:
+#             # taking the pupil normal as line of sight vector
+#             # we multiply by a fixed (assumed) distance and
+#             # add the sphere pos to get the 3d gaze point in eye camera 3d coords
+#             sphere_pos0 = np.array(p0['sphere']['center'])
+#             gaze_pt0 = np.array(p0['circle3D']['normal'])
+
+
+#             sphere_pos1 = np.array(p1['sphere']['center'])
+#             gaze_pt1 = np.array(p1['circle3D']['normal'])
+
+
+#             # projected point uv to normal ray vector of camera
+#             ref_vector =  undistort_unproject_pts(ref['screen_pos'] , camera_matrix, dist_coefs).tolist()[0]
+#             ref_vector = ref_vector / np.linalg.norm(ref_vector)
+#             # assuming a fixed (assumed) distance we get a 3d point in world camera 3d coords.
+#             ref_pt_3d = ref_vector*calibration_distance
+
+
+#             point_triple_3d = tuple(gaze_pt0), tuple(gaze_pt1) , ref_pt_3d
+#             cal_data.append(point_triple_3d)
+#         except KeyError as e:
+#             # this pupil data point did not have 3d detected data.
+#             pass
+
+#     return cal_data
+
+
+def find_rigid_transform(A, B):
+    A = np.matrix(A)
+    B = np.matrix(B)
+    assert len(A) == len(B)
+
+    N = A.shape[0]; # total points
+
+    centroid_A = np.mean(A, axis=0)
+    centroid_B = np.mean(B, axis=0)
+
+    # centre the points
+    AA = A - np.tile(centroid_A, (N, 1))
+    BB = B - np.tile(centroid_B, (N, 1))
+
+    # dot is matrix multiplication for array
+    H = np.transpose(AA) * BB
+
+    U, S, Vt = np.linalg.svd(H)
+
+    R = Vt.T * U.T
+
+    # special reflection case
+    if np.linalg.det(R) < 0:
+       print "Reflection detected"
+       Vt[2,:] *= -1
+       R = Vt.T * U.T
+
+    t = -R*centroid_A.T + centroid_B.T
+
+    return np.array(R), np.array(t).reshape(3)
+
+def calculate_residual_3D_Points( ref_points, gaze_points, eye_to_world_matrix ):
+
+    average_distance = 0.0
+    distance_variance = 0.0
+    transformed_gaze_points = []
+
+    for p in gaze_points:
+        point = np.zeros(4)
+        point[:3] = p
+        point[3] = 1.0
+        point = eye_to_world_matrix.dot(point)
+        point = np.squeeze(np.asarray(point))
+        transformed_gaze_points.append( point[:3] )
+
+    for(a,b) in zip( ref_points, transformed_gaze_points):
+        average_distance += np.linalg.norm(a-b)
+
+    average_distance /= len(ref_points)
+
+    for(a,b) in zip( ref_points, transformed_gaze_points):
+        distance_variance += (np.linalg.norm(a-b) - average_distance)**2
+
+    distance_variance /= len(ref_points)
+
+    return average_distance, distance_variance

@@ -1,9 +1,9 @@
 '''
 (*)~----------------------------------------------------------------------------------
  Pupil - eye tracking platform
- Copyright (C) 2012-2015  Pupil Labs
+ Copyright (C) 2012-2016  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0) License.
+ Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
  License details are in the file license.txt, distributed as part of this software.
 ----------------------------------------------------------------------------------~(*)
 '''
@@ -22,7 +22,7 @@ from glob import glob
 import cv2
 import numpy as np
 from video_capture import File_Capture,EndofVideoFileError
-from player_methods import correlate_data,update_recording_0v4_to_current,update_recording_0v3_to_current
+from player_methods import correlate_data, is_pupil_rec_dir,update_recording_0v4_to_current,update_recording_0v3_to_current,update_recording_0v5_to_current,update_recording_0v73_to_current
 from methods import denormalize
 from version_utils import VersionFormat, read_rec_version, get_version
 from av_writer import AV_Writer
@@ -42,17 +42,14 @@ from vis_watermark import Vis_Watermark
 from scan_path import Scan_Path
 from manual_gaze_correction import Manual_Gaze_Correction
 from eye_video_overlay import Eye_Video_Overlay
-from calibration_routines.gaze_mappers import Dummy_Gaze_Mapper,Simple_Gaze_Mapper,Volumetric_Gaze_Mapper,Bilateral_Gaze_Mapper
-from fixation_detector import Dispersion_Duration_Fixation_Detector
+from fixation_detector import Fixation_Detector_Dispersion_Duration
 
 
 available_plugins = Vis_Circle,Vis_Cross, Vis_Polyline, \
                     Vis_Light_Points, Vis_Watermark, \
                     Scan_Path, \
                     Manual_Gaze_Correction,Eye_Video_Overlay, \
-                    Dummy_Gaze_Mapper,Simple_Gaze_Mapper, \
-                    Volumetric_Gaze_Mapper,Bilateral_Gaze_Mapper, \
-                    Dispersion_Duration_Fixation_Detector
+                    Fixation_Detector_Dispersion_Duration
 name_by_index = [p.__name__ for p in available_plugins]
 index_by_name = dict(zip(name_by_index,range(len(name_by_index))))
 plugin_by_name = dict(zip(name_by_index,available_plugins))
@@ -69,14 +66,18 @@ def export(should_terminate,frames_to_export,current_frame, rec_dir,user_dir,sta
     with open(meta_info_path) as info:
         meta_info = dict( ((line.strip().split('\t')) for line in info.readlines() ) )
 
-    video_path = glob(os.path.join(rec_dir,"world.*"))[0]
+    video_path = [f for f in glob(os.path.join(rec_dir,"world.*")) if f[-3:] in ('mp4','mkv','avi')][0]
     timestamps_path = os.path.join(rec_dir, "world_timestamps.npy")
     pupil_data_path = os.path.join(rec_dir, "pupil_data")
 
 
     rec_version = read_rec_version(meta_info)
-    if rec_version >= VersionFormat('0.5'):
+    if rec_version >= VersionFormat('0.7.4'):
         pass
+    if rec_version >= VersionFormat('0.7.3'):
+        update_recording_0v73_to_current(rec_dir)
+    elif rec_version >= VersionFormat('0.5'):
+        update_recording_0v5_to_current(rec_dir)
     elif rec_version >= VersionFormat('0.4'):
         update_recording_0v4_to_current(rec_dir)
     elif rec_version >= VersionFormat('0.3'):

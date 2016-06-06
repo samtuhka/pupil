@@ -1,9 +1,9 @@
 '''
 (*)~----------------------------------------------------------------------------------
  Pupil - eye tracking platform
- Copyright (C) 2012-2015  Pupil Labs
+ Copyright (C) 2012-2016  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0) License.
+ Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
  License details are in the file license.txt, distributed as part of this software.
 ----------------------------------------------------------------------------------~(*)
 '''
@@ -22,7 +22,7 @@ if platform.system() == 'Darwin':
     shutil.rmtree('dist/Pupil Capture')
     print 'removed the non-app dist bundle'
 
-    bundle_name = 'Pupil Capture %s MacOS'%dpkg_deb_version()
+    bundle_name = 'pupil_capture_mac_os_x64_v%s'%dpkg_deb_version()
     bundle_dmg_name = 'Install Pupil Capture'
     src_dir = 'dist'
     bundle_app_dir = os.path.join(src_dir,'Pupil Capture.app/' )
@@ -54,7 +54,7 @@ elif platform.system() == 'Linux':
             pass
 
     #lets build the structure for our deb package.
-    deb_root = 'pupil_capture_%s'%dpkg_deb_version()
+    deb_root = 'pupil_capture_linux_os_x64_v%s'%dpkg_deb_version()
     DEBIAN_dir = os.path.join(deb_root,'DEBIAN')
     opt_dir = os.path.join(deb_root,'opt')
     bin_dir = os.path.join(deb_root,'usr','bin')
@@ -112,19 +112,11 @@ Terminal=false
 Icon=pupil-capture
 Categories=Application;
 Name[en_US]=Pupil Capture
-Actions=Binocular;Terminal;BinocularTerminal;
-
-[Desktop Action Binocular]
-Name= Binocular Mode
-Exec=/opt/pupil_capture/pupil_capture binocular
+Actions=Terminal;
 
 [Desktop Action Terminal]
 Name=Open in Terminal
-Exec=x-terminal-emulator -e pupil_capture
-
-[Desktop Action BinocularTerminal]
-Name=Open in Terminal Binocular
-Exec=x-terminal-emulator -e "pupil_capture binocular"'''
+Exec=x-terminal-emulator -e pupil_capture'''
         f.write(content)
     os.chmod(os.path.join(app_dir,'pupil_capture.desktop'),0644)
 

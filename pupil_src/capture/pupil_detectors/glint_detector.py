@@ -14,7 +14,6 @@ from file_methods import Persistent_Dict
 import numpy as np
 from methods import *
 
-from c_methods import eye_filter
 from glfw import *
 from template import Pupil_Detector
 
@@ -78,7 +77,7 @@ class Glint_Detector(object):
         secondDist = minDist
         secondGlint = None
         if pupil['confidence']> 0.0:
-            pupilCenter = pupil['center']
+            pupilCenter = pupil['ellipse']['center']
             maxDist = self.glint_dist * (1.0*pupilDiameter/2)
             for glint in glints:
                 dist = math.sqrt((glint[1] - pupilCenter[0])**2 + (glint[2] - pupilCenter[1])**2)
