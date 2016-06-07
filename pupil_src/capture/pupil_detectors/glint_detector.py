@@ -186,21 +186,16 @@ class Glint_Detector(object):
         spikes = bins[hist[:,0]>40]
 
         if spikes.shape[0] >0:
-            lowest_spike = spikes.min()
             highest_spike = spikes.max()
         else:
-            lowest_spike = 200
             highest_spike = 255
 
-        offset = 17
         spectral_offset = self.glint_thres
 
-        img = frame.img
+        img = np.copy(frame.img)
         hist *= 1./hist.max()
 
-        binary_img = bin_thresholding(pupil_img,image_upper=lowest_spike + offset)
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7,7))
-        cv2.dilate(binary_img, kernel,binary_img, iterations=2)
         spec_mask = bin_thresholding(pupil_img, image_upper=highest_spike - spectral_offset)
         cv2.erode(spec_mask, kernel,spec_mask, iterations=1)
 
@@ -213,20 +208,22 @@ class Glint_Detector(object):
         g[:] = cv2.min(g,spec_mask)
 
         contours, hierarchy = cv2.findContours(spec_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-        #cv2.imshow("aft_cont", img)
-        #cv2.waitKey(1)
+
         if self._window:
             self.gl_display_in_window(img)
 
         glints = []
+
         for cnt in contours:
             area = cv2.contourArea(cnt)
             if area > self.glint_min and area< self.glint_max:
                 centroid = self.contourCenter(cnt)
                 newRow = [0, centroid[0], centroid[1], centroid[0]*1.0/frame.img.shape[1], (frame.img.shape[0]-centroid[1]*1.0)/frame.img.shape[0], eye_id]
                 glints.append (newRow)
+
         #if (pupil['confidence']):
         #    self.irisDetection(gray, pupil)
+
         glints = self.filterGlints(frame, glints, pupil, eye_id)
         return glints
 
