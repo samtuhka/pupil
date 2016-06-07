@@ -81,6 +81,7 @@ def eye(pupil_queue, timebase, pipe_to_world, is_alive_flag, user_dir, version, 
         #monitoring
         import psutil
         import math
+        from time import time
 
 
         # helpers/utils
@@ -365,6 +366,7 @@ def eye(pupil_queue, timebase, pipe_to_world, is_alive_flag, user_dir, version, 
 
             #update performace graphs
             t = frame.timestamp
+            tUnix = time()
             dt,ts = t-ts,t
             try:
                 fps_graph.add(1./dt)
@@ -401,10 +403,12 @@ def eye(pupil_queue, timebase, pipe_to_world, is_alive_flag, user_dir, version, 
             # pupil ellipse detection
             result = g_pool.pupil_detector.detect(frame, g_pool.u_r, g_pool.display_mode == 'algorithm')
             result['id'] = eye_id
+            result['unix_ts'] = tUnix
 
             #glint detection
             glints = glint_detector.glint(frame, eye_id, u_roi=g_pool.u_r, pupil=result)
             result['glints'] = glints
+
 
             # stream the result
             g_pool.pupil_queue.put(result)
