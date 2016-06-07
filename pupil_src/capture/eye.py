@@ -401,11 +401,16 @@ def eye(pupil_queue, timebase, pipe_to_world, is_alive_flag, user_dir, version, 
             # pupil ellipse detection
             result = g_pool.pupil_detector.detect(frame, g_pool.u_r, g_pool.display_mode == 'algorithm')
             result['id'] = eye_id
+
+            #glint detection
+            glints = glint_detector.glint(frame, eye_id, u_roi=g_pool.u_r, pupil=result)
+            result['glints'] = glints
+
             # stream the result
             g_pool.pupil_queue.put(result)
 
-             #glint detection
-            glints = glint_detector.glint(frame, eye_id, u_roi=g_pool.u_r, pupil=result)
+
+
 
             g_pool.glints.put(glints)
 
@@ -460,7 +465,10 @@ def eye(pupil_queue, timebase, pipe_to_world, is_alive_flag, user_dir, version, 
                             draw_points([result['ellipse']['center']],size=20,color=RGBA(1.,0.,0.,confidence),sharpness=1.)
                     glints = np.array(glints)
                     if len(glints)>0 and glints[0][3]:
-                        cygl_draw_points(glints[:,1:3], size=20,color=cygl_rgba(0.,0.,1.,.5),sharpness=1.)
+                        if glints[1][3]:
+                            cygl_draw_points(glints[:,1:3], size=20,color=cygl_rgba(0.,0.,1.,.5),sharpness=1.)
+                        elif result['confidence'] > 0.75:
+                            cygl_draw_points(glints[:,1:3], size=20,color=cygl_rgba(0.,0.,1.,.5),sharpness=1.)
 
                     # render graphs
                     graph.push_view()

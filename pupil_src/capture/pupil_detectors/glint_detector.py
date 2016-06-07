@@ -38,6 +38,12 @@ class Glint_Detector(object):
         self.glint_max = self.session_settings.get('glint_max',200.)
 
 
+    def bin_thresholding(image, image_lower=0, image_upper=256):
+        binary_img = cv2.inRange(image, np.asarray(image_lower),
+                np.asarray(image_upper))
+        return binary_img
+
+
 
     def irisDetection(self, img, pupil):
         pupilCenter = pupil['center']
@@ -87,6 +93,8 @@ class Glint_Detector(object):
                     secondGlint = minGlint
                     minGlint = glint
         glints = []
+        if minGlint:
+            glints = [minGlint,[timestamp,0,0,0,0, eye_id]]
         if minGlint and secondGlint:
             min = np.array(minGlint[1:3]) - np.array(list(pupilCenter))
             second = np.array(secondGlint[1:3]) - np.array(list(pupilCenter))
@@ -100,14 +108,30 @@ class Glint_Detector(object):
 
     def glint(self,frame, eye_id, u_roi, pupil):
         gray = frame.gray[u_roi.view]
-        val,binImg = cv2.threshold(gray, self.glint_thres, 255, cv2.THRESH_BINARY)
+
         timestamp = frame.timestamp
-        st7 = cv2.getStructuringElement(cv2.MORPH_CROSS,(7,7))
-        binImg= cv2.morphologyEx(binImg, cv2.MORPH_OPEN, st7)
+
+        val,binImg = cv2.threshold(gray, self.glint_thres, 256, cv2.THRESH_BINARY)
+        st7 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(7,7))
+        binImg= cv2.morphologyEx(binImg, cv2.MORPH_OPEN, st7, iterations=1)
         binImg = cv2.morphologyEx(binImg, cv2.MORPH_DILATE, st7, iterations=1)
         binImg = cv2.erode(binImg, st7, iterations=1)
         contours, hierarchy = cv2.findContours(binImg, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-        cv2.drawContours(binImg,contours,-1,(0,255,0),3)
+        cv2.drawContours(binImg,contours,-1,(0,256,0),3)
+
+        #val,binImg = cv2.threshold(gray, self.glint_thres, 255, cv2.THRESH_BINARY)
+        #cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7,7))
+        #kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7,7))
+        #cv2.dilate(binImg, kernel,binImg, iterations=2)
+        #val, spec_mask = cv2.threshold(gray, self.glint_thres, 250, cv2.THRESH_BINARY)
+        #cv2.erode(binImg, kernel,spec_mask, iterations=1)
+        #spec_mask = cv2.erode(spec_mask, kernel, iterations=2)
+
+        #cv2.imshow("name", binImg)
+        #cv2.waitKey(1)
+
+        contours, hierarchy = cv2.findContours(binImg, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
         glints = []
         for cnt in contours:
             area = cv2.contourArea(cnt)
