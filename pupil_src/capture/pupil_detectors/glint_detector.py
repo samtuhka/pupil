@@ -15,7 +15,8 @@ import numpy as np
 from methods import *
 
 from glfw import *
-#from template import Pupil_Detector
+from gl_utils import  adjust_gl_view, clear_gl_screen,basic_gl_setup,make_coord_system_norm_based,make_coord_system_pixel_based
+from pyglui.cygl.utils import draw_gl_texture
 
 # gui
 from pyglui import ui
@@ -25,6 +26,63 @@ from pyglui import ui
 import logging
 logger = logging.getLogger(__name__)
 
+class Roi(object):
+    """this is a simple 2D Region of Interest class
+    it is applied on numpy arrays for convenient slicing
+    like this:
+    roi_array_slice = full_array[r.view]
+    # do something with roi_array_slice
+    this creates a view, no data copying done
+    """
+    def __init__(self, array_shape):
+        self.array_shape = array_shape
+        self.lX = 0
+        self.lY = 0
+        self.uX = array_shape[1]
+        self.uY = array_shape[0]
+        self.nX = 0
+        self.nY = 0
+
+    @property
+    def view(self):
+        return slice(self.lY,self.uY,),slice(self.lX,self.uX)
+
+    @view.setter
+    def view(self, value):
+        raise Exception('The view field is read-only. Use the set methods instead')
+
+    def add_vector(self,(x,y)):
+        """
+        adds the roi offset to a len2 vector
+        """
+        return (self.lX+x,self.lY+y)
+
+    def sub_vector(self,(x,y)):
+        """
+        subs the roi offset to a len2 vector
+        """
+        return (x-self.lX,y-self.lY)
+
+    def set(self,vals):
+        if vals is not None and len(vals) is 5:
+            if vals[-1] == self.array_shape:
+                self.lX,self.lY,self.uX,self.uY,_ = vals
+            else:
+                logger.info('Image size has changed: Region of Interest has been reset')
+        elif vals is not None and len(vals) is 4:
+            self.lX,self.lY,self.uX,self.uY= vals
+
+    def get(self):
+        return self.lX,self.lY,self.uX,self.uY,self.array_shape
+
+
+
+def bin_thresholding(image, image_lower=0, image_upper=256):
+    binary_img = cv2.inRange(image, np.asarray(image_lower),
+                np.asarray(image_upper))
+
+    return binary_img
+
 class Glint_Detector(object):
 
     def __init__(self, g_pool):
@@ -33,16 +91,21 @@ class Glint_Detector(object):
         self.session_settings = Persistent_Dict(os.path.join(g_pool.user_dir,'user_settings_glint_detector') )
 
         self.glint_dist = self.session_settings.get('glint_dist', 3.0)
-        self.glint_thres = self.session_settings.get('glint_thres',185.)
-        self.glint_min = self.session_settings.get('glint_min',0.)
-        self.glint_max = self.session_settings.get('glint_max',200.)
+        self.glint_thres = self.session_settings.get('glint_thres',5.)
+        self.glint_min = self.session_settings.get('glint_min',50.)
+        self.glint_max = self.session_settings.get('glint_max',750.)
+
+        #debug window
+        self.suggested_size = 640,480
+        self._window = None
+        self.window_should_open = False
+        self.window_should_close = False
 
 
     def bin_thresholding(image, image_lower=0, image_upper=256):
         binary_img = cv2.inRange(image, np.asarray(image_lower),
                 np.asarray(image_upper))
         return binary_img
-
 
 
     def irisDetection(self, img, pupil):
@@ -107,37 +170,60 @@ class Glint_Detector(object):
         return glints
 
     def glint(self,frame, eye_id, u_roi, pupil):
+
+
+        if self.window_should_open:
+            self.open_window((frame.img.shape[1],frame.img.shape[0]))
+        if self.window_should_close:
+            self.close_window()
+
         gray = frame.gray[u_roi.view]
+        p_r = Roi(gray.shape)
+        pupil_img = gray[p_r.view]
 
-        timestamp = frame.timestamp
+        hist = cv2.calcHist([pupil_img],[0],None,[256],[0,256])
+        bins = np.arange(hist.shape[0])
+        spikes = bins[hist[:,0]>40]
 
-        val,binImg = cv2.threshold(gray, self.glint_thres, 256, cv2.THRESH_BINARY)
-        st7 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(7,7))
-        binImg= cv2.morphologyEx(binImg, cv2.MORPH_OPEN, st7, iterations=1)
-        binImg = cv2.morphologyEx(binImg, cv2.MORPH_DILATE, st7, iterations=1)
-        binImg = cv2.erode(binImg, st7, iterations=1)
-        contours, hierarchy = cv2.findContours(binImg, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-        cv2.drawContours(binImg,contours,-1,(0,256,0),3)
+        if spikes.shape[0] >0:
+            lowest_spike = spikes.min()
+            highest_spike = spikes.max()
+        else:
+            lowest_spike = 200
+            highest_spike = 255
 
-        #val,binImg = cv2.threshold(gray, self.glint_thres, 255, cv2.THRESH_BINARY)
-        #cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7,7))
-        #kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7,7))
-        #cv2.dilate(binImg, kernel,binImg, iterations=2)
-        #val, spec_mask = cv2.threshold(gray, self.glint_thres, 250, cv2.THRESH_BINARY)
-        #cv2.erode(binImg, kernel,spec_mask, iterations=1)
-        #spec_mask = cv2.erode(spec_mask, kernel, iterations=2)
+        offset = 17
+        spectral_offset = self.glint_thres
 
-        #cv2.imshow("name", binImg)
+        img = frame.img
+        hist *= 1./hist.max()
+
+        binary_img = bin_thresholding(pupil_img,image_upper=lowest_spike + offset)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7,7))
+        cv2.dilate(binary_img, kernel,binary_img, iterations=2)
+        spec_mask = bin_thresholding(pupil_img, image_upper=highest_spike - spectral_offset)
+        cv2.erode(spec_mask, kernel,spec_mask, iterations=1)
+
+        spec_mask= cv2.morphologyEx(spec_mask, cv2.MORPH_OPEN, kernel, iterations=1)
+        spec_mask = cv2.morphologyEx(spec_mask, cv2.MORPH_DILATE, kernel, iterations=1)
+        spec_mask = cv2.erode(spec_mask, kernel, iterations=1)
+
+        overlay =  img[u_roi.view][p_r.view]
+        b,g,r = overlay[:,:,0],overlay[:,:,1],overlay[:,:,2]
+        g[:] = cv2.min(g,spec_mask)
+
+        contours, hierarchy = cv2.findContours(spec_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        #cv2.imshow("aft_cont", img)
         #cv2.waitKey(1)
-
-        contours, hierarchy = cv2.findContours(binImg, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        if self._window:
+            self.gl_display_in_window(img)
 
         glints = []
         for cnt in contours:
             area = cv2.contourArea(cnt)
             if area > self.glint_min and area< self.glint_max:
                 centroid = self.contourCenter(cnt)
-                newRow = [timestamp, centroid[0], centroid[1], centroid[0]*1.0/frame.img.shape[1], (frame.img.shape[0]-centroid[1]*1.0)/frame.img.shape[0], eye_id]
+                newRow = [0, centroid[0], centroid[1], centroid[0]*1.0/frame.img.shape[1], (frame.img.shape[0]-centroid[1]*1.0)/frame.img.shape[0], eye_id]
                 glints.append (newRow)
         #if (pupil['confidence']):
         #    self.irisDetection(gray, pupil)
@@ -157,11 +243,76 @@ class Glint_Detector(object):
     def init_gui(self,sidebar):
         self.menu = ui.Growing_Menu('Glint Detector')
         self.menu.append(ui.Slider('glint_dist',self,label='Distance from pupil',min=0,max=5,step=0.25))
-        self.menu.append(ui.Slider('glint_thres',self,label='Intensity threshold',min=0,max=255,step=5))
-        self.menu.append(ui.Slider('glint_min',self,label='Min size',min=1,max=100,step=1))
+        self.menu.append(ui.Slider('glint_thres',self,label='Intensity offset',min=0,max=255,step=5))
+        self.menu.append(ui.Slider('glint_min',self,label='Min size',min=1,max=250,step=1))
         self.menu.append(ui.Slider('glint_max',self,label='Max size',min=50,max=1000,step=5))
+        self.menu.append(ui.Button('Open debug window', self.toggle_window))
         sidebar.append(self.menu)
 
+    def toggle_window(self):
+        if self._window:
+            self.window_should_close = True
+        else:
+            self.window_should_open = True
+
+    def open_window(self,size):
+        if not self._window:
+            if 0: #we are not fullscreening
+                monitor = glfwGetMonitors()[self.monitor_idx]
+                mode = glfwGetVideoMode(monitor)
+                height,width= mode[0],mode[1]
+            else:
+                monitor = None
+                height,width= size
+
+            active_window = glfwGetCurrentContext()
+            self._window = glfwCreateWindow(height, width, "Glint Detector Debug Window", monitor=monitor, share=active_window)
+            if not 0:
+                glfwSetWindowPos(self._window,200,0)
+
+            self.on_resize(self._window,height,width)
+
+            #Register callbacks
+            glfwSetWindowSizeCallback(self._window,self.on_resize)
+            # glfwSetKeyCallback(self._window,self.on_key)
+            glfwSetWindowCloseCallback(self._window,self.on_close)
+
+            # gl_state settings
+            glfwMakeContextCurrent(self._window)
+            basic_gl_setup()
+
+            # refresh speed settings
+            glfwSwapInterval(0)
+
+            glfwMakeContextCurrent(active_window)
+
+            self.window_should_open = False
+
+    # window calbacks
+    def on_resize(self,window,w,h):
+        active_window = glfwGetCurrentContext()
+        glfwMakeContextCurrent(window)
+        adjust_gl_view(w,h)
+        glfwMakeContextCurrent(active_window)
+
+    def on_close(self,window):
+        self.window_should_close = True
+
+    def close_window(self):
+        if self._window:
+            glfwDestroyWindow(self._window)
+            self._window = None
+            self.window_should_close = False
+
+    def gl_display_in_window(self,img):
+        active_window = glfwGetCurrentContext()
+        glfwMakeContextCurrent(self._window)
+        clear_gl_screen()
+        # gl stuff that will show on your plugin window goes here
+        make_coord_system_norm_based()
+        draw_gl_texture(img,interpolation=False)
+        glfwSwapBuffers(self._window)
+        glfwMakeContextCurrent(active_window)
 
     def cleanup(self):
         self.session_settings['glint_thres'] = self.glint_thres
