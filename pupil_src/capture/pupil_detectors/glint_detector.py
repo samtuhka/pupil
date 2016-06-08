@@ -94,6 +94,7 @@ class Glint_Detector(object):
         self.glint_thres = self.session_settings.get('glint_thres', 5)
         self.glint_min = self.session_settings.get('glint_min',50)
         self.glint_max = self.session_settings.get('glint_max',750)
+        self.dilate = self.session_settings.get('dilate',0)
 
         #debug window
         self.suggested_size = 640,480
@@ -201,6 +202,8 @@ class Glint_Detector(object):
         spec_mask= cv2.morphologyEx(spec_mask, cv2.MORPH_OPEN, kernel, iterations=1)
         spec_mask = cv2.morphologyEx(spec_mask, cv2.MORPH_DILATE, kernel, iterations=1)
         spec_mask = cv2.erode(spec_mask, kernel, iterations=1)
+        spec_mask = cv2.morphologyEx(spec_mask, cv2.MORPH_DILATE, kernel, iterations=self.dilate)
+
 
         if self._window:
             img = frame.img
@@ -254,6 +257,7 @@ class Glint_Detector(object):
         self.menu.append(ui.Slider('glint_thres',self,label='Intensity offset',min=0,max=255,step=1))
         self.menu.append(ui.Slider('glint_min',self,label='Min size',min=1,max=250,step=1))
         self.menu.append(ui.Slider('glint_max',self,label='Max size',min=50,max=1000,step=5))
+        self.menu.append(ui.Slider('dilate',self,label='Dilate',min=0,max=1,step=1))
         self.menu.append(ui.Button('Open debug window', self.toggle_window))
         sidebar.append(self.menu)
 
@@ -327,5 +331,6 @@ class Glint_Detector(object):
         self.session_settings['glint_min'] = self.glint_min
         self.session_settings['glint_max'] = self.glint_max
         self.session_settings['glint_dist'] = self.glint_dist
+        self.session_settings['dilate'] = self.dilate
         self.session_settings.close()
 
