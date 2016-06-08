@@ -170,8 +170,7 @@ class Glint_Detector(object):
             glints = [[timestamp,0,0,0,0, eye_id], [timestamp,0,0,0,0, eye_id]]
         return glints
 
-    def glint(self,frame, eye_id, u_roi, pupil):
-
+    def glint(self,frame, eye_id, u_roi, pupil, roi):
 
         if self.window_should_open:
             self.open_window((frame.img.shape[1],frame.img.shape[0]))
@@ -204,7 +203,10 @@ class Glint_Detector(object):
         spec_mask = cv2.erode(spec_mask, kernel, iterations=1)
         spec_mask = cv2.morphologyEx(spec_mask, cv2.MORPH_DILATE, kernel, iterations=self.dilate)
 
-
+        spec_mask[:roi.lY] = 255
+        spec_mask[roi.uY:] = 255
+        spec_mask[:,:roi.lX] = 255
+        spec_mask[:,roi.uX:] = 255
         if self._window:
             img = frame.img
             overlay =  img[u_roi.view][p_r.view]
@@ -216,6 +218,13 @@ class Glint_Detector(object):
 
             cv2.circle(img,(30,30), r_min,(0,255,0),1)
             cv2.circle(img,(30,30), r_max,(0,0,255),1)
+
+
+            overlay =  img[u_roi.view][roi.view]
+            overlay[::2,0] = 255 #yeay numpy broadcasting
+            overlay[::2,-1]= 255
+            overlay[0,::2] = 255
+            overlay[-1,::2]= 255
 
             if pupil['confidence']> 0.0:
                 pupilCenter = pupil['ellipse']['center']

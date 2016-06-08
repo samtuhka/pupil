@@ -175,7 +175,7 @@ cdef class Detector_3D:
         if debugDetector:
             self.pyResult3D = prepareForVisualization3D(cpp3DResult)
 
-        return pyResult
+        return pyResult, roi
 
 
     def cleanup(self):

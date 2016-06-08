@@ -401,12 +401,12 @@ def eye(pupil_queue, timebase, pipe_to_world, is_alive_flag, user_dir, version, 
 
 
             # pupil ellipse detection
-            result = g_pool.pupil_detector.detect(frame, g_pool.u_r, g_pool.display_mode == 'algorithm')
+            result, roi = g_pool.pupil_detector.detect(frame, g_pool.u_r, g_pool.display_mode == 'algorithm')
             result['id'] = eye_id
             result['unix_ts'] = tUnix
 
             #glint detection
-            glints = glint_detector.glint(frame, eye_id, u_roi=g_pool.u_r, pupil=result)
+            glints = glint_detector.glint(frame, eye_id, u_roi=g_pool.u_r, pupil=result, roi=roi)
             result['glints'] = glints
 
 

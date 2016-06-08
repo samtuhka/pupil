@@ -164,7 +164,7 @@ cdef class Detector_2D:
 
         py_result = convertTo2DPythonResult( deref(cppResultPtr), frame_ , roi )
 
-        return py_result
+        return py_result, roi
 
 
 
