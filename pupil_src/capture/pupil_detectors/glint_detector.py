@@ -207,11 +207,18 @@ class Glint_Detector(object):
             overlay =  img[u_roi.view][p_r.view]
             b,g,r = overlay[:,:,0],overlay[:,:,1],overlay[:,:,2]
             g[:] = cv2.min(g,spec_mask)
+
+            r_min = int((self.glint_min**0.5) / math.pi)
+            r_max = int((self.glint_max**0.5) / math.pi)
+
+            cv2.circle(img,(30,30), r_min,(0,255,0),1)
+            cv2.circle(img,(30,30), r_max,(0,0,255),1)
+
             if pupil['confidence']> 0.0:
                 pupilCenter = pupil['ellipse']['center']
                 pupilDiameter = pupil['diameter']
                 maxDist = int(self.glint_dist * (1.0*pupilDiameter/2))
-                cv2.circle(img,(int(pupilCenter[0]),int(pupilCenter[1])), maxDist,(1,0,0),2)
+                cv2.circle(img,(int(pupilCenter[0]),int(pupilCenter[1])), maxDist,(255,0,0),1)
             self.gl_display_in_window(img)
 
         contours, hierarchy = cv2.findContours(spec_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
