@@ -90,7 +90,7 @@ class Glint_Detector(object):
         self.g_pool = g_pool
         self.session_settings = Persistent_Dict(os.path.join(g_pool.user_dir,'user_settings_glint_detector') )
 
-        self.glint_dist = self.session_settings.get('glint_dist', 2.75)
+        self.glint_dist = self.session_settings.get('glint_dist', 3.0)
         self.glint_thres = self.session_settings.get('glint_thres', 5)
         self.glint_min = self.session_settings.get('glint_min',50)
         self.glint_max = self.session_settings.get('glint_max',750)
@@ -207,6 +207,11 @@ class Glint_Detector(object):
             overlay =  img[u_roi.view][p_r.view]
             b,g,r = overlay[:,:,0],overlay[:,:,1],overlay[:,:,2]
             g[:] = cv2.min(g,spec_mask)
+            if pupil['confidence']> 0.0:
+                pupilCenter = pupil['ellipse']['center']
+                pupilDiameter = pupil['diameter']
+                maxDist = int(self.glint_dist * (1.0*pupilDiameter/2))
+                cv2.circle(img,(int(pupilCenter[0]),int(pupilCenter[1])), maxDist,(1,0,0),2)
             self.gl_display_in_window(img)
 
         contours, hierarchy = cv2.findContours(spec_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
