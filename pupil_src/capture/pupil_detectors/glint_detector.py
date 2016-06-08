@@ -192,7 +192,6 @@ class Glint_Detector(object):
 
         spectral_offset = self.glint_thres
 
-        img = np.copy(frame.img)
         hist *= 1./hist.max()
 
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7,7))
@@ -203,14 +202,14 @@ class Glint_Detector(object):
         spec_mask = cv2.morphologyEx(spec_mask, cv2.MORPH_DILATE, kernel, iterations=1)
         spec_mask = cv2.erode(spec_mask, kernel, iterations=1)
 
-        overlay =  img[u_roi.view][p_r.view]
-        b,g,r = overlay[:,:,0],overlay[:,:,1],overlay[:,:,2]
-        g[:] = cv2.min(g,spec_mask)
+        if self._window:
+            img = frame.img
+            overlay =  img[u_roi.view][p_r.view]
+            b,g,r = overlay[:,:,0],overlay[:,:,1],overlay[:,:,2]
+            g[:] = cv2.min(g,spec_mask)
+            self.gl_display_in_window(img)
 
         contours, hierarchy = cv2.findContours(spec_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-
-        if self._window:
-            self.gl_display_in_window(img)
 
         glints = []
 
