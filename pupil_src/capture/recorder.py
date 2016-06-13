@@ -298,17 +298,6 @@ class Recorder(Plugin):
             self.writer.write_video_frame(frame)
             self.frame_count += 1
 
-            # cv2.putText(frame.img, "Frame %s"%self.frame_count,(200,200), cv2.FONT_HERSHEY_SIMPLEX,1,(255,100,100))
-            for p in events['pupil_positions']:
-                pupil_pos = p['timestamp'],p['confidence'],p['id'],p['norm_pos'][0],p['norm_pos'][1],p['diameter'], p['id']
-                self.pupil_pos_list.append(pupil_pos)
-
-            for g in events.get('gaze_positions',[]):
-                try:
-                    gaze_pos = g['timestamp'],g['confidence'],g['norm_pos'][0],g['norm_pos'][1], g['foundGlint'], g['id']
-                except:
-                    gaze_pos = g['timestamp'],g['confidence'],g['norm_pos'][0],g['norm_pos'][1], None, g['id']
-                self.gaze_pos_list.append(gaze_pos)
             for glint in events['glint_positions']:
                 self.glint_pos_list += glint
             self.timestampsUnix.append(events['timestamp_unix'])
@@ -329,11 +318,6 @@ class Recorder(Plugin):
         save_object(self.data,os.path.join(self.rec_path, "pupil_data"))
 
 
-        gaze_list_path = os.path.join(self.rec_path, "gaze_positions.npy")
-        np.save(gaze_list_path,np.asarray(self.gaze_pos_list))
-
-        pupil_list_path = os.path.join(self.rec_path, "pupil_positions.npy")
-        np.save(pupil_list_path,np.asarray(self.pupil_pos_list))
 
         self.glint_pos_list = np.array(self.glint_pos_list)
         glint_list_path = os.path.join(self.rec_path, "glint_positions.npy")

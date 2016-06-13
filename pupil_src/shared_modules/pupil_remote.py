@@ -135,6 +135,12 @@ class Pupil_Remote(Plugin):
         elif msg == 'c':
             self.notify_all({'subject':'should_stop_calibration'})
             response = 'stopped calibration'
+        elif msg == 'a':
+            self.notify_all({'subject':'accuracy_calibration'})
+            response = 'Set to accuracy calibration'
+        elif msg == 's':
+            self.notify_all({'subject':'screen_marker_calibration'})
+            response = 'Set to screen marker calibration'
         elif msg[0] == 'T':
             try:
                 target = float(msg[2:])

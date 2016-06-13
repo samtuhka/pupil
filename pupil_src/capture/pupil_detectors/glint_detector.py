@@ -175,6 +175,7 @@ class Glint_Detector(object):
                 maxDist = int(self.glint_dist * (1.0*pupilDiameter/2))
                 cv2.circle(img,(int(pupilCenter[0]),int(pupilCenter[1])), maxDist,(255,0,0),1)
             self.gl_display_in_window(img)
+            overlay = None
 
         contours, hierarchy = cv2.findContours(spec_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 

@@ -442,6 +442,13 @@ def world(pupil_queue,timebase,launcher_pipe,eye_pipes,eyes_are_alive,user_dir,v
         # notify each plugin if there are new notifications:
         while g_pool.notifications:
             n = g_pool.notifications.pop(0)
+
+            if n['subject'] is 'screen_marker_calibration':
+                open_plugin(calibration_plugins[0])
+            if n['subject'] is 'accuracy_calibration':
+                open_plugin(calibration_plugins[4])
+
+
             for p in g_pool.plugins:
                 p.on_notify(n)
 

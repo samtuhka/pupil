@@ -78,6 +78,7 @@ class Natural_Features_Calibration(Calibration_Plugin):
         self.ref_list = []
         self.pupil_list = []
         self.glint_pupil_list =[]
+        self.glint_list =[]
         self.calGlint = self.g_pool.calGlint
 
     def stop(self):
