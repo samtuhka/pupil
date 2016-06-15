@@ -11,7 +11,7 @@
 import os
 import cv2
 import numpy as np
-from methods import normalize,denormalize
+from methods import normalize,denormalize, makeCalibDir
 from pyglui.cygl.utils import draw_points_norm,draw_polyline,RGBA
 from OpenGL.GL import GL_POLYGON
 from circle_detector import find_concetric_circles
@@ -105,7 +105,11 @@ class Manual_Marker_Calibration(Calibration_Plugin):
         self.active = False
         #self.close_window()
         self.button.status_text = ''
-        finish_calibration(self.g_pool,self.pupil_list,self.ref_list)
+
+        base_dir = self.g_pool.user_dir.rsplit(os.path.sep,1)[0]
+        dir = makeCalibDir(base_dir)
+
+        finish_calibration(self.g_pool,self.pupil_list,self.ref_list, dir = dir)
 
 
     def update(self,frame,events):
