@@ -156,6 +156,16 @@ def make_eye_kernel(inner_size,outer_size):
     kernel[offset:offset+inner_size,offset:offset+inner_size]= inner
     return kernel
 
+
+def makeCalibDir(base_dir):
+        recDir = os.path.join(base_dir,'recordings')
+        dir = os.path.join(recDir, "calibData/" + str(time()))
+        try:
+            os.makedirs(dir)
+        except:
+            pass
+        return dir
+
 def dif_gaus(image, lower, upper):
         lower, upper = int(lower-1), int(upper-1)
         lower = cv2.GaussianBlur(image,ksize=(lower,lower),sigmaX=0)

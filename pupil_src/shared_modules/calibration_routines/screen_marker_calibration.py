@@ -11,7 +11,7 @@
 import os
 import cv2
 import numpy as np
-from methods import normalize,denormalize
+from methods import normalize,denormalize, makeCalibDir
 from gl_utils import adjust_gl_view,clear_gl_screen,basic_gl_setup
 import OpenGL.GL as gl
 from glfw import *
@@ -267,9 +267,11 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         #         self.g_pool.plugins.add(Bilateral_Glint_Gaze_Mapper, args={'params':params_glint, 'params_eye0':params_eye0_glint, 'params_eye1':params_eye1_glint})
         #     else:
         #         self.g_pool.plugins.add(Glint_Gaze_Mapper, args={'params': params_glint, 'interpolParams': params})
-        dir = self.makeCalibDir()
 
-        finish_calibration(self.g_pool,self.pupil_list,self.ref_list, dir)
+        base_dir = self.g_pool.user_dir.rsplit(os.path.sep,1)[0]
+        dir = makeCalibDir(base_dir)
+
+        finish_calibration(self.g_pool,self.pupil_list,self.ref_list, dir = dir)
 
         try:
             #np.save(os.path.join(dir,'cal_pt_cloud_eye0.npy'),cal_pt_cloud_eye0)
@@ -283,17 +285,6 @@ class Screen_Marker_Calibration(Calibration_Plugin):
             np.save(os.path.join(dir,'cal_pt_cloud_glint.npy'),cal_pt_cloud_glint)
             np.save(os.path.join(dir,'cal_ref_list.npy'),ref_list)
 
-
-
-    def makeCalibDir(self):
-        base_dir = self.g_pool.user_dir.rsplit(os.path.sep,1)[0]
-        recDir = os.path.join(base_dir,'recordings')
-        dir = os.path.join(recDir, "calibData/" + str(time()))
-        try:
-            os.makedirs(dir)
-        except:
-            pass
-        return dir
 
     def close_window(self):
         if self._window:

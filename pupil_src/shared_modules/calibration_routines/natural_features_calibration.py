@@ -11,7 +11,7 @@
 import os
 import cv2
 import numpy as np
-from methods import normalize
+from methods import normalize, makeCalibDir
 from finish_calibration import finish_calibration
 from pyglui.cygl.utils import draw_points_norm,RGBA
 from glfw import GLFW_PRESS
@@ -86,7 +86,11 @@ class Natural_Features_Calibration(Calibration_Plugin):
         logger.info("Stopping Calibration")
         self.active = False
         self.button.status_text = ''
-        finish_calibration(self.g_pool,self.pupil_list,self.ref_list)
+
+        base_dir = self.g_pool.user_dir.rsplit(os.path.sep,1)[0]
+        dir = makeCalibDir(base_dir)
+
+        finish_calibration(self.g_pool,self.pupil_list,self.ref_list, dir = dir)
 
 
     def update(self,frame,events):
