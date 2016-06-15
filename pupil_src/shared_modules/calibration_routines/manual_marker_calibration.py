@@ -142,10 +142,13 @@ class Manual_Marker_Calibration(Calibration_Plugin):
                 second_ellipse =  self.markers[0][1]
                 col_slice = int(second_ellipse[0][0]-second_ellipse[1][0]/2),int(second_ellipse[0][0]+second_ellipse[1][0]/2)
                 row_slice = int(second_ellipse[0][1]-second_ellipse[1][1]/2),int(second_ellipse[0][1]+second_ellipse[1][1]/2)
-                marker_gray = gray_img[slice(*row_slice),slice(*col_slice)]
-                avg = cv2.mean(marker_gray)[0] #CV2 fn return has changed!
-                center = marker_gray[second_ellipse[1][1]/2,second_ellipse[1][0]/2]
-                rel_shade = center-avg
+                try:
+                    marker_gray = gray_img[slice(*row_slice),slice(*col_slice)]
+                    avg = cv2.mean(marker_gray)[0] #CV2 fn return has changed!
+                    center = marker_gray[second_ellipse[1][1]/2,second_ellipse[1][0]/2]
+                    rel_shade = center-avg
+                except:
+                    rel_shade = 0
 
                 #auto_stop logic
                 if rel_shade > 30:
