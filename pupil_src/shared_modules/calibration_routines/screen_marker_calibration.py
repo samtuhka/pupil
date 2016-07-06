@@ -163,11 +163,12 @@ class Screen_Marker_Calibration(Calibration_Plugin):
                             (1., 0.),(0.,0.)]
 
         else:
-            self.sites = [  (.25, .5), (0,.5), (.25, .25), (.25, .75),
-                        (0.,1.),(.5,1.),(1.,1.),
-                        (1.,.5), (.75, .25), (.75, .75),
-                        (1., 0.),(.5, .25),(0.,0.),(.5,.5), (.5, .75),
-                        (.75,.5)]
+            self.sites = [  (0.,1.),(.25, 1.),(.5,1.),(.75,1.),(1.,1.),
+                            (0., .75), (.25, .75),  (.5, .75), (.75, .75), (1.,.75),
+                            (0,.5), (.25, .5),(.5,.5), (.75,.5),(1.,.5),
+                            (0.,.25), (.25, .25), (.5, .25), (.75, .25), (1., .25),
+                            (0.,0.), (1.,0.)
+                       ]
 
 
 
@@ -407,7 +408,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
         glfwMakeContextCurrent(self._window)
         clear_gl_screen()
-        gl.glColor3f(.85, .85, .85)
+        gl.glColor3f(.80, .80, .8)
         self.draw_rect(0, 0, 2000, 2000)
         hdpi_factor = glfwGetFramebufferSize(self._window)[0]/glfwGetWindowSize(self._window)[0]
         r = 110*self.marker_scale * hdpi_factor
@@ -423,7 +424,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
             ratio = (out_range[1]-out_range[0])/(in_range[1]-in_range[0])
             return (value-in_range[0])*ratio+out_range[0]
 
-        pad = 0.1*1920
+        #pad = 0.1*1920
         pad = .7*r
 
         screen_pos = map_value(self.display_pos[0],out_range=(pad,p_window_size[0]-pad)),map_value(self.display_pos[1],out_range=(p_window_size[1]-pad,pad))
@@ -448,9 +449,9 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         p_window_size = glfwGetWindowSize(self._window)
         hdpi_factor = glfwGetFramebufferSize(self._window)[0]/glfwGetWindowSize(self._window)[0]
         r = 110*self.marker_scale * hdpi_factor
-        x = screen_pos[0] + r*.6
+        x = screen_pos[0] + r*.7
         y = screen_pos[1] +  r*.7
-        x /= (p_window_size[0]+2*0.6*r)
+        x /= (p_window_size[0]+2*0.7*r)
         y /= (p_window_size[1]+2*0.7*r)
         x *= p_window_size[0]
         y *= p_window_size[1]
