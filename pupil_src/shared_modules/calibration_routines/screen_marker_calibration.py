@@ -163,11 +163,12 @@ class Screen_Marker_Calibration(Calibration_Plugin):
                             (1., 0.),(0.,0.)]
 
         else:
-            self.sites = [  (0.,1.),(.25, 1.),(.5,1.),(.75,1.),(1.,1.),
-                            (0., .75), (.25, .75),  (.5, .75), (.75, .75), (1.,.75),
+            self.sites = [  
+                            (0., .70), (.25, .70),  (.5, .70), (.75, .70), (1.,.70),
                             (0,.5), (.25, .5),(.5,.5), (.75,.5),(1.,.5),
+                            (0,.35), (.25, .35),(.5,.35), (.75,.35),(1.,.35),
                             (0.,.25), (.25, .25), (.5, .25), (.75, .25), (1., .25),
-                            (0.,0.), (1.,0.)
+                            (0.2,0.), (.8,0.)
                        ]
 
 
@@ -500,6 +501,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
         #pad = 0.1*1920
         pad = .7*r
+        
 
         screen_pos = map_value(self.display_pos[0],out_range=(pad,p_window_size[0]-pad)),map_value(self.display_pos[1],out_range=(p_window_size[1]-pad,pad))
         alpha = interp_fn(self.screen_marker_state,0.,1.,float(self.sample_duration+self.lead_in+self.lead_out),float(self.lead_in),float(self.sample_duration+self.lead_in))

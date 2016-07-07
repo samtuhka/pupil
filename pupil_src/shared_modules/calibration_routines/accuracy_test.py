@@ -129,10 +129,10 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
 
     def start(self):
         logger.info("Starting Accuracy_Test")
-        self.sites = [  (.1, .8), (.3, .8), (.5, .8), (.7, .8), (.9, .8),
+        self.sites = [  (.1, .675), (.3, .675), (.5, .675), (.7, .675), (.9, .675),
                         (0,.5), (.3, .5), (.5, .5), (.7, .5), (1., .5), 
                         (.1, .3), (.3, .3), (.5, .3), (.7, .3), (.9, .3),
-                        (0., 0),(1.,0.),
+                        (0.2,0.), (.8,0.),
                         (.5,.5),(.5,.5)]
         #self.sites = np.random.random((4,2)).tolist() + self.sites
         self.changeSitesCloseToWheel()
