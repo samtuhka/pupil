@@ -59,13 +59,13 @@ def basic_gl_setup():
 def clear_gl_screen():
     glClear(GL_COLOR_BUFFER_BIT)
 
-def adjust_gl_view(w,h):
+def adjust_gl_view(w,h, x0 = 0, y0 = 0):
     """
     adjust view onto our scene.
     """
     h = max(h,1)
     w = max(w,1)
-    glViewport(0, 0, w, h)
+    glViewport(x0, y0,  w, h)
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
     glOrtho(0, w, h, 0, -1, 1)

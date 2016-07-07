@@ -12,7 +12,7 @@ import os
 import cv2
 import numpy as np
 from methods import normalize,denormalize, makeCalibDir
-from gl_utils import adjust_gl_view,clear_gl_screen,basic_gl_setup
+from gl_utils import adjust_gl_view,clear_gl_screen,basic_gl_setup, make_coord_system_pixel_based,make_coord_system_norm_based
 import OpenGL.GL as gl
 from glfw import *
 import calibrate
@@ -23,7 +23,7 @@ from circle_detector import find_concetric_circles
 import audio
 
 from pyglui import ui
-from pyglui.cygl.utils import draw_points, draw_points_norm, draw_polyline, draw_polyline_norm, RGBA,draw_concentric_circles
+from pyglui.cygl.utils import draw_points, draw_points_norm, draw_polyline, draw_polyline_norm, RGBA,draw_concentric_circles, draw_gl_texture, draw_named_texture
 from pyglui.pyfontstash import fontstash
 from pyglui.ui import get_opensans_font_path
 from plugin import Calibration_Plugin
@@ -391,6 +391,51 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         if self._window:
             self.gl_display_in_window()
 
+    def encode_marker(self,mId):
+        marker_id_str = "%02d"%mId
+        # marker is based on grid of black (0) /white (1) pixels
+        #  b|b|b|b|b
+        #  b|o|m|o|b    b = black border feature
+        #  b|m|m|m|b    o = orientation feature
+        #  b|o|m|o|b    m = message feature
+        #  b|b|b|b|b
+        grid = 5
+        m_with_b = np.zeros((grid,grid),dtype=np.uint8)
+        m = m_with_b[1:-1,1:-1]
+
+        #bitdepth = grid-border squared - 3 for orientation (orientation still yields one bit)
+        bitdepth = ((5-2)**2)-3
+
+        if mId>=(2**bitdepth):
+            raise Exception("ERROR: ID overflow, this marker can only hold %i bits of information" %bitdepth)
+
+        msg = [0]*bitdepth
+        for i in range(len(msg))[::-1]:
+            msg[i] = mId%2
+            mId = mId >>1
+
+        # out first bit is encoded in the orientation corners of the marker:
+        #               MSB = 0                   MSB = 1
+        #               W|*|*|W   ^               B|*|*|B   ^
+        #               *|*|*|*  / \              *|*|*|*  / \
+        #               *|*|*|*   |  UP           *|*|*|*   |  UP
+        #               B|*|*|W   |               W|*|*|B   |
+
+        msb = msg.pop(0)
+        if msb:
+            orientation  = 0,1,0,0
+        else:
+            orientation = 1,0,1,1
+
+        m[0,0], m[-1,0], m[-1,-1], m[0,-1] = orientation
+
+        msg_mask = np.ones(m.shape,dtype=np.bool)
+        msg_mask[0,0], msg_mask[-1,0], msg_mask[-1,-1], msg_mask[0,-1] = 0,0,0,0
+        m[msg_mask] = msg[::-1]
+
+        # print "Marker: \n", m_with_b
+        return m_with_b
+
     def draw_rect(self, x, y, width, height):
         gl.glBegin(gl.GL_QUADS)                               # start drawing a rectangle
         gl.glVertex2f(x, y)                                   # bottom left point
@@ -399,6 +444,33 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         gl.glVertex2f(x, y + height)                          # top left point
         gl.glEnd()
 
+    def draw_markers(self):
+        xs, ys = glfwGetFramebufferSize(self._window)
+        aspect = xs / float(ys)
+        marker_ids = [0,1,2,4,5] #3 missing because of stupidity in the simulator
+        positions = [[0.5, 0.8],[1 - 0.15/aspect, 0.8], [0.15/aspect, 0.1], [1 - 0.15/aspect, 0.1], [0.15/aspect, 0.8]]
+        s = int(ys * 0.1)
+        rows,cols,m_size = 1,1,7
+
+        for mid, pos in zip(marker_ids, positions):
+            canvas = np.ones((m_size*rows,m_size*cols),dtype=np.uint8)
+            canvas *= 100
+            marker_with_padding = np.ones((7,7))
+            marker_with_padding[1:-1,1:-1] = self.encode_marker(mid)
+            m_size = marker_with_padding.shape[0]
+            canvas[:m_size,:m_size] = marker_with_padding*255
+            canvas = cv2.resize(canvas,(512, 512),interpolation=cv2.INTER_NEAREST)
+            canvas = cv2.cvtColor(canvas,cv2.COLOR_GRAY2BGR)
+
+            x = (pos[0]*xs - 0.5*s)
+            y = (pos[1]*ys - 0.5*s)
+            adjust_gl_view(s,s, int(x), int(y) )
+
+            make_coord_system_norm_based()
+            draw_gl_texture(canvas)
+            
+        make_coord_system_pixel_based
+        adjust_gl_view(*glfwGetFramebufferSize(self._window))
 
     def gl_display_in_window(self):
         active_window = glfwGetCurrentContext()
@@ -410,6 +482,8 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         clear_gl_screen()
         gl.glColor3f(.80, .80, .8)
         self.draw_rect(0, 0, 2000, 2000)
+        self.draw_markers()
+
         hdpi_factor = glfwGetFramebufferSize(self._window)[0]/glfwGetWindowSize(self._window)[0]
         r = 110*self.marker_scale * hdpi_factor
         gl.glMatrixMode(gl.GL_PROJECTION)
