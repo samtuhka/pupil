@@ -83,12 +83,18 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         self.sample_duration =  sample_duration # number of frames to sample per site
         self.lead_in = 25 #frames of marker shown before starting to sample
         self.lead_out = 5 #frames of markers shown after sampling is donw
+        self.black_duration = 15
         self.session_settings = Persistent_Dict(os.path.join(g_pool.user_dir,'user_settings_screen_calibration') )
 
         self.active_site = None
         self.sites = []
         self.display_pos = None
         self.on_position = False
+
+
+        self.screen_markers = [[],[],[],[],[],[], []]
+        self.encode_markers()
+
 
         self.markers = []
         self.pos = None
@@ -181,8 +187,6 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         self.pupil_list = []
         self.glint_list = []
         self.glint_pupil_list =[]
-        self.screen_markers = [[],[],[],[],[],[], []]
-        self.encode_markers()
         self.clicks_to_close = 5
         self.open_window("Calibration")
 
@@ -350,7 +354,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
                     self.glint_pupil_list.append(g_p_pt)
 
             # Animate the screen marker
-            if self.screen_marker_state < self.sample_duration+self.lead_in+self.lead_out:
+            if self.screen_marker_state < self.sample_duration+self.lead_in+self.lead_out+self.black_duration:
                 if self.detected or not on_position:
                     self.screen_marker_state += 1
             else:
@@ -512,13 +516,13 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
         screen_pos = map_value(self.display_pos[0],out_range=(pad,p_window_size[0]-pad)),map_value(self.display_pos[1],out_range=(p_window_size[1]-pad,pad))
         alpha = interp_fn(self.screen_marker_state,0.,1.,float(self.sample_duration+self.lead_in+self.lead_out),float(self.lead_in),float(self.sample_duration+self.lead_in))
-
-        draw_concentric_circles(screen_pos,r,6,alpha)
+        if self.screen_marker_state < self.sample_duration+self.lead_in+self.lead_out:
+            draw_concentric_circles(screen_pos,r,6,alpha)
         #some feedback on the detection state
 
         if self.detected and self.on_position:
             draw_points([screen_pos],size=10*self.marker_scale,color=RGBA(0.,.8,0.,alpha),sharpness=0.5)
-        else:
+        elif self.screen_marker_state < self.sample_duration+self.lead_in+self.lead_out:
             draw_points([screen_pos],size=10*self.marker_scale,color=RGBA(0.8,0.,0.,alpha),sharpness=0.5)
 
         if self.clicks_to_close <5:
