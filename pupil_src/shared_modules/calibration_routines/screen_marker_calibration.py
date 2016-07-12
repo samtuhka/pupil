@@ -181,6 +181,8 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         self.pupil_list = []
         self.glint_list = []
         self.glint_pupil_list =[]
+        self.screen_markers = [[],[],[],[],[],[], []]
+        self.encode_markers()
         self.clicks_to_close = 5
         self.open_window("Calibration")
 
@@ -437,6 +439,20 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         # print "Marker: \n", m_with_b
         return m_with_b
 
+    def encode_markers(self):
+        rows,cols,m_size = 1,1,7
+        for mid in range(6):
+            canvas = np.ones((m_size*rows,m_size*cols),dtype=np.uint8)
+            canvas *= 100
+            marker_with_padding = np.ones((7,7))
+            marker_with_padding[1:-1,1:-1] = self.encode_marker(mid)
+            m_size = marker_with_padding.shape[0]
+            canvas[:m_size,:m_size] = marker_with_padding*255
+            canvas = cv2.resize(canvas,(108, 108),interpolation=cv2.INTER_NEAREST)
+            canvas = cv2.cvtColor(canvas,cv2.COLOR_GRAY2BGR)
+            self.screen_markers[mid] = canvas 
+
+
     def draw_rect(self, x, y, width, height):
         gl.glBegin(gl.GL_QUADS)                               # start drawing a rectangle
         gl.glVertex2f(x, y)                                   # bottom left point
@@ -451,18 +467,9 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         marker_ids = [0,1,2,4,5] #3 missing because of stupidity in the simulator
         positions = [[0.5, 0.8],[1 - 0.15/aspect, 0.8], [0.15/aspect, 0.1], [1 - 0.15/aspect, 0.1], [0.15/aspect, 0.8]]
         s = int(ys * 0.1)
-        rows,cols,m_size = 1,1,7
 
         for mid, pos in zip(marker_ids, positions):
-            canvas = np.ones((m_size*rows,m_size*cols),dtype=np.uint8)
-            canvas *= 100
-            marker_with_padding = np.ones((7,7))
-            marker_with_padding[1:-1,1:-1] = self.encode_marker(mid)
-            m_size = marker_with_padding.shape[0]
-            canvas[:m_size,:m_size] = marker_with_padding*255
-            canvas = cv2.resize(canvas,(512, 512),interpolation=cv2.INTER_NEAREST)
-            canvas = cv2.cvtColor(canvas,cv2.COLOR_GRAY2BGR)
-
+            canvas = self.screen_markers[mid]
             x = (pos[0]*xs - 0.5*s)
             y = (pos[1]*ys - 0.5*s)
             adjust_gl_view(s,s, int(x), int(y) )
@@ -471,7 +478,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
             draw_gl_texture(canvas)
             
         make_coord_system_pixel_based
-        adjust_gl_view(*glfwGetFramebufferSize(self._window))
+        on_resize(self._window,*glfwGetFramebufferSize(self._window))
 
     def gl_display_in_window(self):
         active_window = glfwGetCurrentContext()
