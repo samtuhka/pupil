@@ -39,7 +39,10 @@ class Glint_Detector(object):
         self.glint_min = self.session_settings.get('glint_min',50)
         self.glint_max = self.session_settings.get('glint_max',750)
         self.dilate = self.session_settings.get('dilate',0)
-
+        self.prev_glint = (0,0,0)
+        self.prev_timestamp = 0
+        self.vel_sum = 0.
+        self.vel_n = 0.001
         #debug window
         self.suggested_size = 640,480
         self._window = None
@@ -87,22 +90,34 @@ class Glint_Detector(object):
         timestamp = frame.timestamp
         pupilDiameter = pupil['diameter']
         minGlint = None
-        minDist = 10000
+        minDist = 100000000
         secondDist = minDist
         secondGlint = None
+        minVel  = 0
         if pupil['confidence']> 0.0:
             pupilCenter = pupil['ellipse']['center']
             maxDist = self.glint_dist * (1.0*pupilDiameter/2)
             for glint in glints:
                 dist = math.sqrt((glint[1] - pupilCenter[0])**2 + (glint[2] - pupilCenter[1])**2)
-                if dist < maxDist and dist < secondDist:
+                dt = timestamp - self.prev_timestamp
+                vel = math.sqrt((glint[1] - self.prev_glint[1])**2 + (glint[2] - self.prev_glint[2])**2) / dt
+                if dist < maxDist and dist < secondDist and (vel < (1.5*self.vel_sum/self.vel_n) or self.vel_n < 5*30):
                     secondDist = minDist
                     minDist = dist
                     secondGlint = minGlint
                     minGlint = glint
+                    minVel = vel
         glints = []
         if minGlint:
             glints = [minGlint,[timestamp,0,0,0,0, eye_id]]
+            self.prev_glints = minGlint
+            self.prev_timestamp = timestamp
+            if pupil['confidence']> 0.6:
+                self.vel_sum += minVel
+                self.vel_n += 1.
+        if self.vel_n > 1800:
+            self.vel_n = 0.001
+            self.vel_sum = 0
         if minGlint and secondGlint:
             min = np.array(minGlint[1:3]) - np.array(list(pupilCenter))
             second = np.array(secondGlint[1:3]) - np.array(list(pupilCenter))
@@ -151,6 +166,7 @@ class Glint_Detector(object):
         spec_mask[roi.uY:] = 255
         spec_mask[:,:roi.lX] = 255
         spec_mask[:,roi.uX:] = 255
+
         if self._window:
             img = frame.img
             overlay =  img[u_roi.view][p_r.view]
@@ -176,11 +192,8 @@ class Glint_Detector(object):
                 cv2.circle(img,(int(pupilCenter[0]),int(pupilCenter[1])), maxDist,(255,0,0),1)
             self.gl_display_in_window(img)
             overlay = None
-
-        contours, hierarchy = cv2.findContours(spec_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-
         glints = []
-
+        contours, hierarchy = cv2.findContours(spec_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         for cnt in contours:
             area = cv2.contourArea(cnt)
             if area > self.glint_min and area< self.glint_max:
@@ -190,7 +203,7 @@ class Glint_Detector(object):
 
         #if (pupil['confidence']):
         #    self.irisDetection(gray, pupil)
-
+        
         glints = self.filterGlints(frame, glints, pupil, eye_id)
         return glints
 
