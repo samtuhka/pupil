@@ -190,6 +190,8 @@ cdef class Detector_2D:
         advanced_controls_menu.append(ui.Slider('ellipse_roundness_ratio',self.detectProperties,label='Ellipse roundness ratio',min=0.1,max=1.0,step=0.01))
         advanced_controls_menu.append(ui.Slider('canny_ration',self.detectProperties,label='Canny ration',min=1,max=15,step=0.01))
         advanced_controls_menu.append(ui.Slider('canny_treshold',self.detectProperties,label='Canny treshold',min=100,max=300,step=1))
+        advanced_controls_menu.append(ui.Slider('coarse_filter_min',self.detectProperties,label='Coarse filter min',min=100,max=200,step=1))
+        advanced_controls_menu.append(ui.Slider('coarse_filter_max',self.detectProperties,label='Coarse filter max',min=250,max=350,step=1))
 
         #advanced_controls_menu.append(ui.Slider('contour_size_min',self.detectProperties,label='Contour min length',min=1,max=200,step=1))
         #advanced_controls_menu.append(ui.Slider('ellipse_true_support_min_dist',self.detectProperties,label='ellipse_true_support_min_dist',min=0.1,max=7,step=0.1))
