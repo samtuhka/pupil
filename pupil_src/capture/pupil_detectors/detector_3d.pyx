@@ -159,6 +159,12 @@ cdef class Detector_3D:
             roi_y = y1 * scale + roi_y
             roi_width = width*scale
             roi_height = height*scale
+
+            if roi_x + roi_width > image_width:
+                roi_width = image_width - roi_x
+            if roi_y + roi_height > image_height:
+                roi_height = image_height - roi_y
+            
             roi.set((roi_x, roi_y, roi_x+roi_width, roi_y+roi_height))
 
         # every coordinates in the result are relative to the current ROI
