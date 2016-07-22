@@ -178,11 +178,16 @@ cdef class Detector_2D:
         self.menu.append(ui.Slider('intensity_range',self.detectProperties,label='Pupil intensity range',min=0,max=60,step=1))
         self.menu.append(ui.Slider('pupil_size_min',self.detectProperties,label='Pupil min',min=1,max=250,step=1))
         self.menu.append(ui.Slider('pupil_size_max',self.detectProperties,label='Pupil max',min=50,max=400,step=1))
+
         self.menu.append(ui.Button('Open debug window',self.toggle_window))
-        #advanced_controls_menu = ui.Growing_Menu('Advanced Controls')
+        advanced_controls_menu = ui.Growing_Menu('Advanced Controls')
+        advanced_controls_menu.append(ui.Slider('ellipse_roundness_ratio',self.detectProperties,label='Ellipse roundness ratio',min=0.1,max=1.0,step=0.01))
+        advanced_controls_menu.append(ui.Slider('canny_ration',self.detectProperties,label='Canny ration',min=1,max=15,step=0.01))
+        advanced_controls_menu.append(ui.Slider('canny_treshold',self.detectProperties,label='Canny treshold',min=100,max=300,step=1))
+
         #advanced_controls_menu.append(ui.Slider('contour_size_min',self.detectProperties,label='Contour min length',min=1,max=200,step=1))
         #advanced_controls_menu.append(ui.Slider('ellipse_true_support_min_dist',self.detectProperties,label='ellipse_true_support_min_dist',min=0.1,max=7,step=0.1))
-        #self.menu.append(advanced_controls_menu)
+        self.menu.append(advanced_controls_menu)
         sidebar.append(self.menu)
 
     def deinit_gui(self):
