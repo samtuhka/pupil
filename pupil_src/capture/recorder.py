@@ -20,6 +20,7 @@ from file_methods import save_object
 from methods import get_system_info
 from av_writer import JPEG_Writer, AV_Writer, Audio_Capture
 from calibration_routines.camera_intrinsics_estimation import load_camera_calibration
+from shutil import copyfile
 #logging
 import logging
 logger = logging.getLogger(__name__)
@@ -405,6 +406,7 @@ class Recorder(Plugin):
 
         logger.info("Saved Recording.")
         self.notify_all( {'subject':'rec_stopped','rec_path':self.rec_path,'network_propagate':True} )
+        copyfile(os.path.join(self.g_pool.user_dir,'capture.log'), os.path.join(self.rec_path,"capture.log"))
 
     def cleanup(self):
         """gets called when the plugin get terminated.
