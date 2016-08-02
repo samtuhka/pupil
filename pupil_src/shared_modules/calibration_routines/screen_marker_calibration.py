@@ -26,9 +26,7 @@ from pyglui import ui
 from pyglui.cygl.utils import draw_points, draw_points_norm, draw_polyline, draw_polyline_norm, RGBA,draw_concentric_circles, draw_gl_texture, draw_named_texture
 from pyglui.pyfontstash import fontstash
 from pyglui.ui import get_opensans_font_path
-from plugin import Calibration_Plugin
-
-from gaze_mappers import Simple_Gaze_Mapper, Binocular_Gaze_Mapper, Binocular_Glint_Gaze_Mapper, Glint_Gaze_Mapper, Bilateral_Glint_Gaze_Mapper
+from calibration_plugin_base import Calibration_Plugin
 from finish_calibration import finish_calibration
 
 #logging
@@ -117,8 +115,6 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
 
 
-
-
     def init_gui(self):
         self.monitor_idx = self.session_settings.get('monitor', 0)
         self.monitor_names = [glfwGetMonitorName(m) for m in glfwGetMonitors()]
@@ -149,18 +145,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
             self.button = None
 
 
-    def toggle(self,_=None):
-        if self.active:
-            self.stop()
-        else:
-            self.start()
-
-
-
     def start(self):
-        # ##############
-        # DEBUG
-        #self.stop()
 
         logger.info("Starting Calibration")
         if self.g_pool.detection_mapping_mode == '3d':
@@ -237,9 +222,6 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         # TODO: redundancy between all gaze mappers -> might be moved to parent class
         logger.info('Stopping Calibration')
         self.screen_marker_state = 0
-        self.active = False
-        audio.say("Stopping Calibration")
-        logger.info("Stopping Calibration")
         self.smooth_pos = 0,0
         self.counter = 0
         self.close_window()
@@ -344,13 +326,13 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
             #always save pupil positions
             for p_pt in recent_pupil_positions:
-                if p_pt['confidence'] > self.g_pool.pupil_confidence_threshold:
+                if p_pt['confidence'] > self.pupil_confidence_threshold:
                     self.pupil_list.append(p_pt)
             for g_pt in recent_glint_positions:
                 if g_pt[0][3]:
                     self.glint_list.append(g_pt[0])
             for g_p_pt in recent_glint_pupil_positions:
-                if g_p_pt['glint_found'] and g_p_pt['pupil_confidence'] > self.g_pool.pupil_confidence_threshold:
+                if g_p_pt['glint_found'] and g_p_pt['pupil_confidence'] > self.pupil_confidence_threshold:
                     self.glint_pupil_list.append(g_p_pt)
 
             # Animate the screen marker
@@ -525,9 +507,9 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         elif self.screen_marker_state < self.sample_duration+self.lead_in+self.lead_out:
             draw_points([screen_pos],size=10*self.marker_scale,color=RGBA(0.8,0.,0.,alpha),sharpness=0.5)
 
-        if self.clicks_to_close <5:
-            self.glfont.set_size(int(p_window_size[0]/30.))
-            self.glfont.draw_text(p_window_size[0]/2.,p_window_size[1]/4.,'Touch %s more times to cancel calibration.'%self.clicks_to_close)
+        #if self.clicks_to_close <5:
+        #    self.glfont.set_size(int(p_window_size[0]/30.))
+        #    self.glfont.draw_text(p_window_size[0]/2.,p_window_size[1]/4.,'Touch %s more times to cancel calibration.'%self.clicks_to_close)
 
         glfwSwapBuffers(self._window)
         glfwMakeContextCurrent(active_window)

@@ -22,7 +22,7 @@ import calibrate
 import audio
 
 from pyglui import ui
-from plugin import Calibration_Plugin
+from calibration_plugin_base import Calibration_Plugin
 
 #logging
 import logging
@@ -201,7 +201,7 @@ class Adjust_Calibration(Calibration_Plugin):
 
             #always save pupil positions
             for pt in events.get('gaze_positions',[]):
-                if pt['confidence'] > self.g_pool.pupil_confidence_threshold:
+                if pt['confidence'] > self.pupil_confidence_threshold:
                     #we add an id for the calibration preprocess data to work as is usually expects pupil data.
                     pt['id'] = 0
                     self.gaze_list.append(pt)

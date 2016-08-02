@@ -120,7 +120,7 @@ class Offline_Surface_Tracker(Surface_Tracker):
 
         def set_min_marker_perimeter(val):
             self.min_marker_perimeter = val
-            self.notify_all_delayed({'subject':'min_marker_perimeter_changed'},delay=1)
+            self.notify_all({'subject':'min_marker_perimeter_changed','delay':1})
 
         self.menu.elements[:] = []
         self.menu.append(ui.Button('Close',close))
@@ -246,18 +246,8 @@ class Offline_Surface_Tracker(Surface_Tracker):
                 for s in self.surfaces:
                     if s.cache == None and s not in [s for s,i in self.edit_surf_verts]:
                         s.init_cache(self.cache,self.camera_calibration,self.min_marker_perimeter)
-                        self.notify_all_delayed({'subject':'surfaces_changed'})
+                        self.notify_all({'subject':'surfaces_changed','delay':1})
 
-
-
-        #map recent gaze onto detected surfaces used for pupil server
-        for s in self.surfaces:
-            if s.detected:
-                s.gaze_on_srf = []
-                for p in events.get('gaze_positions',[]):
-                    gp_on_s = tuple(s.img_to_ref_surface(np.array(p['norm_pos'])))
-                    p['realtime gaze on ' + s.name] = gp_on_s
-                    s.gaze_on_srf.append(gp_on_s)
 
 
         #allow surfaces to open/close windows
@@ -400,7 +390,7 @@ class Offline_Surface_Tracker(Surface_Tracker):
 
 
         with open(os.path.join(metrics_dir,'surface_visibility.csv'),'wb') as csvfile:
-            csv_writer = csv.writer(csvfile, delimiter='\t',quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            csv_writer = csv.writer(csvfile, delimiter=',')
 
             # surface visibility report
             frame_count = len(self.g_pool.timestamps[section])
@@ -418,7 +408,7 @@ class Offline_Surface_Tracker(Surface_Tracker):
 
 
         with open(os.path.join(metrics_dir,'surface_gaze_distribution.csv'),'wb') as csvfile:
-            csv_writer = csv.writer(csvfile, delimiter='\t',quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            csv_writer = csv.writer(csvfile, delimiter=',')
 
             # gaze distribution report
             gaze_in_section = list(chain(*self.g_pool.gaze_positions_by_frame[section]))
@@ -430,7 +420,7 @@ class Offline_Surface_Tracker(Surface_Tracker):
 
             for s in self.surfaces:
                 gaze_on_srf  = s.gaze_on_srf_in_section(section)
-                gaze_on_srf = set([gp['base']['timestamp'] for gp in gaze_on_srf])
+                gaze_on_srf = set([gp['base_data']['timestamp'] for gp in gaze_on_srf])
                 not_on_any_srf -= gaze_on_srf
                 csv_writer.writerow( (s.name, len(gaze_on_srf)) )
 
@@ -440,7 +430,7 @@ class Offline_Surface_Tracker(Surface_Tracker):
 
 
         with open(os.path.join(metrics_dir,'surface_events.csv'),'wb') as csvfile:
-            csv_writer = csv.writer(csvfile, delimiter='\t',quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            csv_writer = csv.writer(csvfile, delimiter=',')
 
             # surface events report
             csv_writer.writerow(('frame_number','timestamp','surface_name','surface_uid','event_type'))
@@ -467,7 +457,7 @@ class Offline_Surface_Tracker(Surface_Tracker):
 
             #save surface_positions as csv
             with open(os.path.join(metrics_dir,'srf_positons'+surface_name+'.csv'),'wb') as csvfile:
-                csv_writer =csv.writer(csvfile, delimiter='\t',quotechar='|', quoting=csv.QUOTE_MINIMAL)
+                csv_writer =csv.writer(csvfile, delimiter=',')
                 csv_writer.writerow(('frame_idx','timestamp','m_to_screen','m_from_screen','detected_markers'))
                 for idx,ts,ref_srf_data in zip(range(len(self.g_pool.timestamps)),self.g_pool.timestamps,s.cache):
                     if in_mark <= idx <= out_mark:
@@ -477,18 +467,18 @@ class Offline_Surface_Tracker(Surface_Tracker):
 
             # save gaze on srf as csv.
             with open(os.path.join(metrics_dir,'gaze_positions_on_surface'+surface_name+'.csv'),'wb') as csvfile:
-                csv_writer = csv.writer(csvfile, delimiter='\t',quotechar='|', quoting=csv.QUOTE_MINIMAL)
+                csv_writer = csv.writer(csvfile, delimiter=',')
                 csv_writer.writerow(('world_timestamp','world_frame_idx','gaze_timestamp','x_norm','y_norm','x_scaled','y_scaled','on_srf'))
                 for idx,ts,ref_srf_data in zip(range(len(self.g_pool.timestamps)),self.g_pool.timestamps,s.cache):
                     if in_mark <= idx <= out_mark:
                         if ref_srf_data is not None and ref_srf_data is not False:
                             for gp in s.gaze_on_srf_by_frame_idx(idx,ref_srf_data['m_from_screen']):
-                                csv_writer.writerow( (ts,idx,gp['base']['timestamp'],gp['norm_pos'][0],gp['norm_pos'][1],gp['norm_pos'][0]*s.real_world_size['x'],gp['norm_pos'][1]*s.real_world_size['y'],gp['on_srf']) )
+                                csv_writer.writerow( (ts,idx,gp['base_data']['timestamp'],gp['norm_pos'][0],gp['norm_pos'][1],gp['norm_pos'][0]*s.real_world_size['x'],gp['norm_pos'][1]*s.real_world_size['y'],gp['on_srf']) )
 
 
             # save fixation on srf as csv.
             with open(os.path.join(metrics_dir,'fixations_on_surface'+surface_name+'.csv'),'wb') as csvfile:
-                csv_writer = csv.writer(csvfile, delimiter='\t',quotechar='|', quoting=csv.QUOTE_MINIMAL)
+                csv_writer = csv.writer(csvfile, delimiter=',')
                 csv_writer.writerow(('id','start_timestamp','duration','start_frame','end_frame','norm_pos_x','norm_pos_y','x_scaled','y_scaled','on_srf'))
                 fixations_on_surface = []
                 for idx,ref_srf_data in zip(range(len(self.g_pool.timestamps)),s.cache):
@@ -497,9 +487,9 @@ class Offline_Surface_Tracker(Surface_Tracker):
                             for f in s.fixations_on_srf_by_frame_idx(idx,ref_srf_data['m_from_screen']):
                                 fixations_on_surface.append(f)
 
-                removed_dublicates = dict([(f['base']['id'],f) for f in fixations_on_surface]).values()
+                removed_dublicates = dict([(f['base_data']['id'],f) for f in fixations_on_surface]).values()
                 for f_on_s in removed_dublicates:
-                    f = f_on_s['base']
+                    f = f_on_s['base_data']
                     f_x,f_y = f_on_s['norm_pos']
                     f_on_srf = f_on_s['on_srf']
                     csv_writer.writerow( (f['id'],f['timestamp'],f['duration'],f['start_frame_index'],f['end_frame_index'],f_x,f_y,f_x*s.real_world_size['x'],f_y*s.real_world_size['y'],f_on_srf) )

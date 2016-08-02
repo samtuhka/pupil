@@ -12,10 +12,11 @@ import sys, os,platform,errno
 from glob import glob
 from copy import deepcopy
 from time import time
-try:
+if platform.system() == 'Darwin':
     from billiard import freeze_support
-except:
+else:
     from multiprocessing import freeze_support
+
 
 if getattr(sys, 'frozen', False):
     user_dir = os.path.expanduser(os.path.join('~','pupil_player_settings'))
@@ -87,9 +88,10 @@ from OpenGL.GL import glClearColor
 from video_capture import File_Capture,EndofVideoFileError,FileSeekError
 
 # helpers/utils
+import csv_utils
 from version_utils import VersionFormat, read_rec_version, get_version
 from methods import normalize, denormalize, delta_t,get_system_info
-from player_methods import correlate_data, is_pupil_rec_dir,update_recording_0v4_to_current,update_recording_0v3_to_current,update_recording_0v5_to_current,update_recording_0v73_to_current
+from player_methods import correlate_data, is_pupil_rec_dir, update_recording_to_recent, load_meta_info
 
 #monitoring
 import psutil
@@ -107,7 +109,6 @@ from video_export_launcher import Video_Export_Launcher
 from scan_path import Scan_Path
 from offline_surface_tracker import Offline_Surface_Tracker
 from marker_auto_trim_marks import Marker_Auto_Trim_Marks
-from pupil_server import Pupil_Server
 from fixation_detector import Fixation_Detector_Dispersion_Duration
 from manual_gaze_correction import Manual_Gaze_Correction
 from show_calibration import Show_Calibration
@@ -119,7 +120,7 @@ from raw_data_exporter import Raw_Data_Exporter
 from log_history import Log_History
 
 system_plugins = [Log_Display,Seek_Bar,Trim_Marks]
-user_launchable_plugins = [Video_Export_Launcher,Raw_Data_Exporter, Vis_Circle,Vis_Cross, Vis_Polyline, Vis_Light_Points,Scan_Path,Fixation_Detector_Dispersion_Duration,Vis_Watermark, Manual_Gaze_Correction, Show_Calibration, Offline_Surface_Tracker,Pupil_Server,Batch_Exporter,Eye_Video_Overlay,Annotation_Player,Log_History] #,Marker_Auto_Trim_Marks
+user_launchable_plugins = [Video_Export_Launcher,Raw_Data_Exporter, Vis_Circle,Vis_Cross, Vis_Polyline, Vis_Light_Points,Scan_Path,Fixation_Detector_Dispersion_Duration,Vis_Watermark, Manual_Gaze_Correction, Show_Calibration, Offline_Surface_Tracker,Batch_Exporter,Eye_Video_Overlay,Annotation_Player,Log_History] #,Marker_Auto_Trim_Marks
 user_launchable_plugins += import_runtime_plugins(os.path.join(user_dir,'plugins'))
 available_plugins = system_plugins + user_launchable_plugins
 name_by_index = [p.__name__ for p in available_plugins]
@@ -181,38 +182,19 @@ def session(rec_dir):
     def get_dt():
         return next(tick)
 
+    update_recording_to_recent(rec_dir)
 
     video_path = [f for f in glob(os.path.join(rec_dir,"world.*")) if f[-3:] in ('mp4','mkv','avi')][0]
     timestamps_path = os.path.join(rec_dir, "world_timestamps.npy")
     pupil_data_path = os.path.join(rec_dir, "pupil_data")
 
-    #parse info.csv file
-    meta_info_path = os.path.join(rec_dir,"info.csv")
-    with open(meta_info_path) as info:
-        meta_info = dict( ((line.strip().split('\t')) for line in info.readlines() ) )
-
+    meta_info = load_meta_info(rec_dir)
     rec_version = read_rec_version(meta_info)
     app_version = get_version(version_file)
 
     # log info about Pupil Platform and Platform in player.log
     logger.info('Application Version: %s'%app_version)
     logger.info('System Info: %s'%get_system_info())
-
-    if rec_version >= VersionFormat('0.7.4'):
-        pass
-    if rec_version >= VersionFormat('0.7.3'):
-        update_recording_0v73_to_current(rec_dir)
-    elif rec_version >= VersionFormat('0.5'):
-        update_recording_0v5_to_current(rec_dir)
-    elif rec_version >= VersionFormat('0.4'):
-        update_recording_0v4_to_current(rec_dir)
-    elif rec_version >= VersionFormat('0.3'):
-        update_recording_0v3_to_current(rec_dir)
-        timestamps_path = os.path.join(rec_dir, "timestamps.npy")
-    else:
-        logger.Error("This recording is to old. Sorry.")
-        return
-
 
     timestamps = np.load(timestamps_path)
     # Initialize capture

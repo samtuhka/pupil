@@ -9,6 +9,7 @@
 '''
 
 import os, sys, platform, errno, getpass
+import csv_utils
 from pyglui import ui
 import numpy as np
 from scipy.interpolate import UnivariateSpline
@@ -30,52 +31,52 @@ logger = logging.getLogger(__name__)
 def get_auto_name():
     return strftime("%Y_%m_%d", localtime())
 
-def sanitize_timestamps(ts):
-    logger.debug("Checking %s timestamps for monotony in direction and smoothness"%ts.shape[0])
-    avg_frame_time = (ts[-1] - ts[0])/ts.shape[0]
-    logger.debug('average_frame_time: %s'%(1./avg_frame_time))
+# def sanitize_timestamps(ts):
+#     logger.debug("Checking %s timestamps for monotony in direction and smoothness"%ts.shape[0])
+#     avg_frame_time = (ts[-1] - ts[0])/ts.shape[0]
+#     logger.debug('average_frame_time: %s'%(1./avg_frame_time))
 
-    raw_ts = ts #only needed for visualization
-    runs = 0
-    while True:
-        #forward check for non monotonic increasing behaviour
-        clean = np.ones((ts.shape[0]),dtype=np.bool)
-        damper  = 0
-        for idx in range(ts.shape[0]-1):
-            if ts[idx] >= ts[idx+1]: #not monotonically increasing timestamp
-                damper = 50
-            clean[idx] = damper <= 0
-            damper -=1
+#     raw_ts = ts #only needed for visualization
+#     runs = 0
+#     while True:
+#         #forward check for non monotonic increasing behaviour
+#         clean = np.ones((ts.shape[0]),dtype=np.bool)
+#         damper  = 0
+#         for idx in range(ts.shape[0]-1):
+#             if ts[idx] >= ts[idx+1]: #not monotonically increasing timestamp
+#                 damper = 50
+#             clean[idx] = damper <= 0
+#             damper -=1
 
-        #backward check to smooth timejumps forward
-        damper  = 0
-        for idx in range(ts.shape[0]-1)[::-1]:
-            if ts[idx+1]-ts[idx]>1: #more than one second forward jump
-                damper = 50
-            clean[idx] &= damper <= 0
-            damper -=1
+#         #backward check to smooth timejumps forward
+#         damper  = 0
+#         for idx in range(ts.shape[0]-1)[::-1]:
+#             if ts[idx+1]-ts[idx]>1: #more than one second forward jump
+#                 damper = 50
+#             clean[idx] &= damper <= 0
+#             damper -=1
 
-        if clean.all() == True:
-            if runs >0:
-                logger.debug("Timestamps were bad but are ok now. Correction runs: %s"%runs)
-                # from matplotlib import pyplot as plt
-                # plt.plot(frames,raw_ts)
-                # plt.plot(frames,ts)
-                # # plt.scatter(frames[~clean],ts[~clean])
-                # plt.show()
-            else:
-                logger.debug("Timestamps are clean.")
-            return ts
+#         if clean.all() == True:
+#             if runs >0:
+#                 logger.debug("Timestamps were bad but are ok now. Correction runs: %s"%runs)
+#                 # from matplotlib import pyplot as plt
+#                 # plt.plot(frames,raw_ts)
+#                 # plt.plot(frames,ts)
+#                 # # plt.scatter(frames[~clean],ts[~clean])
+#                 # plt.show()
+#             else:
+#                 logger.debug("Timestamps are clean.")
+#             return ts
 
-        runs +=1
-        if runs > 4:
-            logger.error("Timestamps could not be fixed!")
-            return ts
+#         runs +=1
+#         if runs > 4:
+#             logger.error("Timestamps could not be fixed!")
+#             return ts
 
-        logger.warning("Timestamps are not sane. We detected non monotitc or jumpy timestamps. Fixing them now")
-        frames = np.arange(len(ts))
-        s = UnivariateSpline(frames[clean],ts[clean],s=0)
-        ts = s(frames)
+#         logger.warning("Timestamps are not sane. We detected non monotitc or jumpy timestamps. Fixing them now")
+#         frames = np.arange(len(ts))
+#         s = UnivariateSpline(frames[clean],ts[clean],s=0)
+#         ts = s(frames)
 
 
 
@@ -165,28 +166,41 @@ class Recorder(Plugin):
 
     def toggle(self, _=None):
         if self.running:
-            self.notify_all( {'subject':'should_stop_recording','network_propagate':True} )
+            self.notify_all( {'subject':'recording.should_stop'} )
+            self.notify_all( {'subject':'recording.should_stop', 'remote_notify':'all'} )
         else:
-            self.notify_all( {'subject':'should_start_recording','session_name':self.session_name,'network_propagate':True} )
+            self.notify_all( {'subject':'recording.should_start','session_name':self.session_name} )
+            self.notify_all( {'subject':'recording.should_start','session_name':self.session_name,'remote_notify':'all'} )
 
 
     def on_notify(self,notification):
+        """Handles recorder notifications
 
+        Reacts to notifications:
+            ``recording.should_start``: Starts a new recording session
+            ``recording.should_stop``: Stops current recording session
+
+        Emits notifications:
+            ``recording.started``: New recording session started
+            ``recording.stopped``: Current recording session stopped
+
+        Args:
+            notification (dictionary): Notification dictionary
+        """
         # notification wants to be recorded
         if notification.get('record',False) and self.running:
             self.data['notifications'].append(notification)
 
 
-        # Notificatio to start recording
-        elif notification['subject'] == 'should_start_recording':
+        elif notification['subject'] == 'recording.should_start':
             if self.running:
                 logger.info('Recording already running!')
             else:
                 if notification.get("session_name",""):
                     self.set_session_name(notification["session_name"])
                 self.start()
-        # Remote has stopped recording, we should stop as well.
-        elif notification['subject'] == 'should_stop_recording':
+
+        elif notification['subject'] == 'recording.should_stop':
             if self.running:
                 self.stop()
             else:
@@ -231,11 +245,13 @@ class Recorder(Plugin):
 
         self.meta_info_path = os.path.join(self.rec_path, "info.csv")
 
-        with open(self.meta_info_path, 'w') as f:
-            f.write("Recording Name\t"+self.session_name+ "\n")
-            f.write("Start Date\t"+ strftime("%d.%m.%Y", localtime(self.start_time))+ "\n")
-            f.write("Start Time\t"+ strftime("%H:%M:%S", localtime(self.start_time))+ "\n")
-            f.write("Start Time (seconds since epoch)\t"+ str(self.start_time)+ "\n")
+        with open(self.meta_info_path, 'w') as csvfile:
+            csv_utils.write_key_value_file(csvfile,{
+                'Recording Name': self.session_name,
+                'Start Date': strftime("%d.%m.%Y", localtime(self.start_time)),
+                'Start Time': strftime("%H:%M:%S", localtime(self.start_time)),
+                'Start Time (seconds since epoch)':  str(self.start_time)
+            })
 
         if self.audio_src != 'No Audio':
             audio_path = os.path.join(self.rec_path, "world.wav")
@@ -250,16 +266,10 @@ class Recorder(Plugin):
             self.video_path = os.path.join(self.rec_path, "world.mp4")
             self.writer = AV_Writer(self.video_path,fps=self.g_pool.capture.frame_rate)
 
-        # positions path to eye process
-        if self.record_eye:
-            for alive, pipe in zip(self.g_pool.eyes_are_alive,self.g_pool.eye_pipes):
-                if alive.value:
-                    pipe.send( ('Rec_Start',(self.rec_path,self.raw_jpeg) ) )
-
         if self.show_info_menu:
             self.open_info_menu()
         logger.info("Started Recording.")
-        self.notify_all( {'subject':'rec_started','rec_path':self.rec_path,'session_name':self.session_name,'network_propagate':True} )
+        self.notify_all( {'subject':'recording.started','rec_path':self.rec_path,'session_name':self.session_name,'record_eye':self.record_eye,'compression':self.raw_jpeg} )
 
     def open_info_menu(self):
         self.info_menu = ui.Growing_Menu('additional Recording Info',size=(300,300),pos=(300,300))
@@ -310,11 +320,6 @@ class Recorder(Plugin):
         #explicit release of VideoWriter
         self.writer.release()
         self.writer = None
-
-        if self.record_eye:
-            for alive, pipe in zip(self.g_pool.eyes_are_alive,self.g_pool.eye_pipes):
-                if alive.value:
-                    pipe.send(('Rec_Stop',None))
 
         save_object(self.data,os.path.join(self.rec_path, "pupil_data"))
 
@@ -373,19 +378,20 @@ class Recorder(Plugin):
             logger.info("No camera calibration found.")
 
         try:
-            with open(self.meta_info_path, 'a') as f:
-                f.write("Duration Time\t"+ self.get_rec_time_str()+ "\n")
-                f.write("World Camera Frames\t"+ str(self.frame_count)+ "\n")
-                f.write("World Camera Resolution\t"+ str(self.g_pool.capture.frame_size[0])+"x"+str(self.g_pool.capture.frame_size[1])+"\n")
-                f.write("Capture Software Version\t%s\n"%self.g_pool.version)
-                f.write("System Info\t%s"%get_system_info())
+            with open(self.meta_info_path, 'a') as csvfile:
+                csv_utils.write_key_value_file(csvfile, {
+                    'Duration Time': self.get_rec_time_str(),
+                    'World Camera Frames': self.frame_count,
+                    'World Camera Resolution': str(self.g_pool.capture.frame_size[0])+"x"+str(self.g_pool.capture.frame_size[1]),
+                    'Capture Software Version': self.g_pool.version,
+                    'System Info': get_system_info()
+                }, append=True)
         except Exception:
             logger.exception("Could not save metadata. Please report this bug!")
 
         try:
-            with open(os.path.join(self.rec_path, "user_info.csv"), 'w') as f:
-                for name,val in self.user_info.iteritems():
-                    f.write("%s\t%s\n"%(name,val))
+            with open(os.path.join(self.rec_path, "user_info.csv"), 'w') as csvfile:
+                csv_utils.write_key_value_file(csvfile, self.user_info)
         except Exception:
             logger.exception("Could not save userdata. Please report this bug!")
 
@@ -406,6 +412,8 @@ class Recorder(Plugin):
 
         logger.info("Saved Recording.")
         self.notify_all( {'subject':'rec_stopped','rec_path':self.rec_path,'network_propagate':True} )
+        self.notify_all( {'subject':'recording.stopped','rec_path':self.rec_path} )
+
         copyfile(os.path.join(self.g_pool.user_dir,'capture.log'), os.path.join(self.rec_path,"capture.log"))
 
     def cleanup(self):

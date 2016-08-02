@@ -31,7 +31,7 @@ from pyglui.cygl.utils import draw_points, draw_points_norm, draw_polyline, draw
 
 from pyglui.pyfontstash import fontstash
 from pyglui.ui import get_opensans_font_path
-from plugin import Calibration_Plugin
+from calibration_plugin_base import Calibration_Plugin
 from screen_marker_calibration import Screen_Marker_Calibration
 import calibrate
 #logging
@@ -151,7 +151,7 @@ class Accuracy_Test(Screen_Marker_Calibration,Calibration_Plugin):
         if self.active :
             #always save gaze positions as opposed to pupil positons during calibration
             for pt in events.get('gaze_positions',[]):
-                if pt['confidence'] > self.g_pool.pupil_confidence_threshold:
+                if pt['confidence'] > self.pupil_confidence_threshold:
                     #we add an id for the calibration preprocess data to work as is usually expects pupil data.
                     pt['id'] = 0
                     self.gaze_list.append(pt)
