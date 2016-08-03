@@ -79,7 +79,7 @@ def world(timebase,eyes_are_alive,ipc_pub_url,ipc_sub_url,ipc_push_url,user_dir,
     import psutil
 
     # helpers/utils
-    from file_methods import Persistent_Dict
+    from file_methods import Persistent_Dict, load_object
     from methods import normalize, denormalize, delta_t, get_system_info
     from video_capture import autoCreateCapture, FileCaptureError, EndofVideoFileError, CameraCaptureError
     from version_utils import VersionFormat
@@ -280,13 +280,38 @@ def world(timebase,eyes_are_alive,ipc_pub_url,ipc_sub_url,ipc_push_url,user_dir,
     cygl.utils.init()
     g_pool.main_window = main_window
 
+    g_pool.world_settings = "default"
 
+
+    def set_world_settings(new_settings):
+        g_pool.world_settings = new_settings
+
+        if not new_settings == "default":
+            try:
+                world_settings_new = load_object(os.path.join(g_pool.user_dir,'world_settings_' + new_settings))
+            except:
+                logger.error("Settings don't exist")
+                return
+
+            controls = cap.capture.controls
+            controls_dict = dict([(c.display_name,c) for c in controls])
+            try:
+                cap.frame_rate = world_settings_new['frame_rate']
+                cap.frame_size = world_settings_new['frame_size']
+            except:
+                logger.info("no frame rate and frame size in camera settings")
+            for key in controls_dict:
+                try:
+                    controls_dict[key].value = world_settings_new[key]
+                except:
+                    logger.info("no key with the name '%s' in camera settings" %key)
 
     #setup GUI
     g_pool.gui = ui.UI()
     g_pool.gui.scale = session_settings.get('gui_scale',1)
     g_pool.sidebar = ui.Scrolling_Menu("Settings",pos=(-350,0),size=(0,0),header_pos='left')
     general_settings = ui.Growing_Menu('General')
+    general_settings.append(ui.Selector('world_settings',g_pool,setter=set_world_settings,selection=['default','outdoors'], labels=['Default', 'Outdoors'], label="World settings") )
     general_settings.append(ui.Slider('scale',g_pool.gui, setter=set_scale,step = .05,min=1.,max=2.5,label='Interface size'))
     general_settings.append(ui.Button('Reset window size',lambda: glfw.glfwSetWindowSize(main_window,frame.width,frame.height)) )
     general_settings.append(ui.Selector('audio_mode',audio,selection=audio.audio_modes))

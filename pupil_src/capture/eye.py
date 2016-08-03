@@ -105,7 +105,7 @@ def eye(timebase, is_alive_flag, ipc_pub_url, ipc_sub_url,ipc_push_url, user_dir
 
 
         # helpers/utils
-        from file_methods import Persistent_Dict
+        from file_methods import Persistent_Dict, load_object
         from version_utils import VersionFormat
         from methods import normalize, denormalize, Roi, timer
         from video_capture import autoCreateCapture, FileCaptureError, EndofVideoFileError, CameraCaptureError
@@ -232,6 +232,7 @@ def eye(timebase, is_alive_flag, ipc_pub_url, ipc_sub_url,ipc_push_url, user_dir
         pupil_detector_settings = session_settings.get('pupil_detector_settings',None)
         last_pupil_detector = pupil_detectors[session_settings.get('last_pupil_detector',Detector_2D.__name__)]
         g_pool.pupil_detector = last_pupil_detector(g_pool,pupil_detector_settings)
+        g_pool.pupil_settings = "default"
 
         # UI callback functions
         def set_scale(new_scale):
@@ -249,6 +250,33 @@ def eye(timebase, is_alive_flag, ipc_pub_url, ipc_sub_url,ipc_push_url, user_dir
             g_pool.pupil_detector = new_detector(g_pool)
             g_pool.pupil_detector.init_gui(g_pool.sidebar)
 
+        def set_pupil_settings(new_settings):
+            g_pool.pupil_settings = new_settings
+
+            if not new_settings == "default":
+                try:
+                    pupil_settings_new = load_object(os.path.join(g_pool.user_dir,'pupil_settings_' + new_settings))
+                except:
+                    logger.error("Settings don't exist")
+                pupil_settings = g_pool.pupil_detector.get_settings()
+
+                controls = cap.capture.controls
+                controls_dict = dict([(c.display_name,c) for c in controls])
+                try:
+                    cap.frame_rate = pupil_settings_new['frame_rate']
+                    cap.frame_size = pupil_settings_new['frame_size']
+                except:
+                    logger.info("no frame rate and frame size in camera settings")
+                for key in controls_dict:
+                    try:
+                        controls_dict[key].value = pupil_settings_new[key]
+                    except:
+                        logger.info("no key with the name '%s' in camera settings" %key)
+                for key in pupil_settings.keys():
+                    try:
+                        pupil_settings[key] = pupil_settings_new[key]
+                    except:
+                        logger.info("no key with the name '%s' in pupil settings" %key)
 
         # Initialize glfw
         glfw.glfwInit()
@@ -270,10 +298,12 @@ def eye(timebase, is_alive_flag, ipc_pub_url, ipc_sub_url,ipc_push_url, user_dir
         g_pool.gui.scale = session_settings.get('gui_scale',1)
         g_pool.sidebar = ui.Scrolling_Menu("Settings",pos=(-300,0),size=(0,0),header_pos='left')
         general_settings = ui.Growing_Menu('General')
+        general_settings.append(ui.Selector('pupil_settings',g_pool,setter=set_pupil_settings,selection=['default','indoors','outdoors_sunny', 'outdoors_cloudy'], labels=['Default', 'Indoors', 'Outdoors Sunny', 'Outdoors Cloudy'], label="Pupil settings") )
         general_settings.append(ui.Slider('scale',g_pool.gui, setter=set_scale,step = .05,min=1.,max=2.5,label='Interface Size'))
         general_settings.append(ui.Button('Reset window size',lambda: glfw.glfwSetWindowSize(main_window,frame.width,frame.height)) )
         general_settings.append(ui.Switch('flip',g_pool,label='Flip image display'))
         general_settings.append(ui.Selector('display_mode',g_pool,setter=set_display_mode_info,selection=['camera_image','roi','algorithm'], labels=['Camera Image', 'ROI', 'Algorithm'], label="Mode") )
+
         g_pool.display_mode_info = ui.Info_Text(g_pool.display_mode_info_text[g_pool.display_mode])
         general_settings.append(g_pool.display_mode_info)
         g_pool.sidebar.append(general_settings)
