@@ -29,16 +29,20 @@ logger = logging.getLogger(__name__)
 
 class Glint_Detector(object):
 
-    def __init__(self, g_pool):
+    def __init__(self, g_pool, customSettings = None):
         super(Glint_Detector, self).__init__()
         self.g_pool = g_pool
-        self.session_settings = Persistent_Dict(os.path.join(g_pool.user_dir,'user_settings_glint_detector') )
+        if not customSettings:
+            self.session_settings = Persistent_Dict(os.path.join(g_pool.user_dir,'user_settings_glint_detector') )
+        else:
+            self.session_settings = customSettings
 
         self.glint_dist = self.session_settings.get('glint_dist', 3.0)
         self.glint_thres = self.session_settings.get('glint_thres', 5)
         self.glint_min = self.session_settings.get('glint_min',50)
         self.glint_max = self.session_settings.get('glint_max',750)
         self.dilate = self.session_settings.get('dilate',0)
+
         self.prev_glint = (0,0,0)
         self.prev_timestamp = 0
         self.vel_sum = 0.
@@ -84,6 +88,16 @@ class Glint_Detector(object):
             meanX /= n
             meanY /= n
         #cv2.circle(img,(int(pupilCenter[0]),int(pupilCenter[1])), mean,(1,0,0),2)
+
+    def settings(self):
+        return self.session_settings
+
+    def update(self):
+        self.glint_dist = self.session_settings.get('glint_dist', 3.0)
+        self.glint_thres = self.session_settings.get('glint_thres', 5)
+        self.glint_min = self.session_settings.get('glint_min',50)
+        self.glint_max = self.session_settings.get('glint_max',750)
+        self.dilate = self.session_settings.get('dilate',0)
 
 
     def filterGlints(self, frame, glints, pupil, eye_id):

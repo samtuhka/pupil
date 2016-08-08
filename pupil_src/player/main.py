@@ -26,6 +26,8 @@ else:
     # Make all pupil shared_modules available to this Python session.
     pupil_base_dir = os.path.abspath(__file__).rsplit('pupil_src', 1)[0]
     sys.path.append(os.path.join(pupil_base_dir, 'pupil_src', 'shared_modules'))
+    sys.path.append(os.path.join(pupil_base_dir, 'pupil_src', 'capture'))
+
     # Specifiy user dirs.
     user_dir = os.path.join(pupil_base_dir,'player_settings')
     version_file = None
