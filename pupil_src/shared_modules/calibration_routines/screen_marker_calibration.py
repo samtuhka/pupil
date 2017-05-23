@@ -1,11 +1,12 @@
 '''
-(*)~----------------------------------------------------------------------------------
- Pupil - eye tracking platform
- Copyright (C) 2012-2016  Pupil Labs
+(*)~---------------------------------------------------------------------------
+Pupil - eye tracking platform
+Copyright (C) 2012-2017  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
- License details are in the file license.txt, distributed as part of this software.
-----------------------------------------------------------------------------------~(*)
+Distributed under the terms of the GNU
+Lesser General Public License (LGPL v3.0).
+See COPYING and COPYING.LESSER for license details.
+---------------------------------------------------------------------------~(*)
 '''
 
 import os
@@ -15,25 +16,24 @@ from methods import normalize,denormalize, makeCalibDir
 from gl_utils import adjust_gl_view,clear_gl_screen,basic_gl_setup, make_coord_system_pixel_based,make_coord_system_norm_based
 import OpenGL.GL as gl
 from glfw import *
-import calibrate
-from file_methods import Persistent_Dict,load_object,save_object
+from circle_detector import find_concetric_circles
+from file_methods import Persistent_Dict, load_object,save_object
+from platform import system
+from . import calibrate
 
 from time import time
-from circle_detector import find_concetric_circles
 import audio
 
 from pyglui import ui
 from pyglui.cygl.utils import draw_points, draw_points_norm, draw_polyline, draw_polyline_norm, RGBA,draw_concentric_circles, draw_gl_texture, draw_named_texture
 from pyglui.pyfontstash import fontstash
 from pyglui.ui import get_opensans_font_path
-from calibration_plugin_base import Calibration_Plugin
-from finish_calibration import finish_calibration
+from . calibration_plugin_base import Calibration_Plugin
+from . finish_calibration import finish_calibration
 
 #logging
 import logging
 logger = logging.getLogger(__name__)
-
-
 
 # window calbacks
 def on_resize(window,w,h):
@@ -74,11 +74,11 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
     """
     def __init__(self, g_pool,fullscreen=True,marker_scale=1.0,sample_duration=45):
-        super(Screen_Marker_Calibration, self).__init__(g_pool)
-        self.active = False
+        super().__init__(g_pool)
         self.detected = False
         self.screen_marker_state = 0.
         self.sample_duration =  sample_duration # number of frames to sample per site
+        self.fixation_boost = sample_duration/2.
         self.lead_in = 25 #frames of marker shown before starting to sample
         self.lead_out = 5 #frames of markers shown after sampling is donw
         self.black_duration = 15
@@ -113,6 +113,13 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         self.glfont.set_color_float((0.2,0.5,0.9,1.0))
         self.glfont.set_align_string(v_align='center')
 
+        # UI Platform tweaks
+        if system() == 'Linux':
+            self.window_position_default = (0, 0)
+        elif system() == 'Windows':
+            self.window_position_default = (8, 31)
+        else:
+            self.window_position_default = (0, 0)
 
 
     def init_gui(self):
@@ -130,7 +137,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         self.menu.append(ui.Slider('marker_scale',self,step=0.1,min=0.5,max=2.0,label='Marker size'))
         self.menu.append(ui.Slider('sample_duration',self,step=1,min=10,max=100,label='Sample duration'))
 
-        self.button = ui.Thumb('active',self,setter=self.toggle,label='Calibrate',hotkey='c')
+        self.button = ui.Thumb('active',self,label='C',setter=self.toggle,hotkey='c')
         self.button.on_color[:] = (.3,.2,1.,.9)
         self.g_pool.quickbar.insert(0,self.button)
 
@@ -146,7 +153,10 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
 
     def start(self):
-
+        if not self.g_pool.capture.online:
+            logger.error("Calibration required world capture video input.")
+            return
+        audio.say("Starting Calibration")
         logger.info("Starting Calibration")
         if self.g_pool.detection_mapping_mode == '3d':
             self.sites = [  (.5, .5),
@@ -175,26 +185,26 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         self.clicks_to_close = 5
         self.open_window("Calibration")
 
-    def open_window(self,title='new_window'):
+    def open_window(self, title='new_window'):
         if not self._window:
             if self.fullscreen:
                 monitor = glfwGetMonitors()[self.monitor_idx]
-                width,height,redBits,blueBits,greenBits,refreshRate = glfwGetVideoMode(monitor)
+                width, height, redBits, blueBits, greenBits, refreshRate = glfwGetVideoMode(monitor)
             else:
                 monitor = None
                 width,height= 640,360
 
             self._window = glfwCreateWindow(width, height, title, monitor=monitor, share=glfwGetCurrentContext())
             if not self.fullscreen:
-                glfwSetWindowPos(self._window,200,0)
+                glfwSetWindowPos(self._window, self.window_position_default[0], self.window_position_default[1])
 
-            glfwSetInputMode(self._window,GLFW_CURSOR,GLFW_CURSOR_HIDDEN)
+            glfwSetInputMode(self._window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN)
 
-            #Register callbacks
-            glfwSetFramebufferSizeCallback(self._window,on_resize)
-            glfwSetKeyCallback(self._window,self.on_key)
-            glfwSetMouseButtonCallback(self._window,self.on_button)
-            on_resize(self._window,*glfwGetFramebufferSize(self._window))
+            # Register callbacks
+            glfwSetFramebufferSizeCallback(self._window, on_resize)
+            glfwSetKeyCallback(self._window, self.on_key)
+            glfwSetMouseButtonCallback(self._window, self.on_button)
+            on_resize(self._window, *glfwGetFramebufferSize(self._window))
 
             # gl_state settings
             active_window = glfwGetCurrentContext()
@@ -279,15 +289,15 @@ class Screen_Marker_Calibration(Calibration_Plugin):
     def close_window(self):
         if self._window:
             # enable mouse display
-            active_window = glfwGetCurrentContext();
-            glfwSetInputMode(self._window,GLFW_CURSOR,GLFW_CURSOR_NORMAL)
+            active_window = glfwGetCurrentContext()
+            glfwSetInputMode(self._window, GLFW_CURSOR, GLFW_CURSOR_NORMAL)
             glfwDestroyWindow(self._window)
             self._window = None
             glfwMakeContextCurrent(active_window)
 
-
-    def update(self,frame,events):
-        if self.active:
+    def recent_events(self, events):
+        frame = events.get('frame')
+        if self.active and frame:
             recent_pupil_positions = events['pupil_positions']
             recent_glint_positions = events['glint_positions']
             recent_glint_pupil_positions = events['glint_pupil_vectors']
@@ -297,17 +307,17 @@ class Screen_Marker_Calibration(Calibration_Plugin):
                 self.stop()
                 return
 
-            #detect the marker
-            self.markers = find_concetric_circles(gray_img,min_ring_count=4)
+            # detect the marker
+            self.markers = find_concetric_circles(gray_img, min_ring_count=4)
 
             if len(self.markers) > 0:
-                self.detected= True
-                marker_pos = self.markers[0][0][0] # first marker, innermost ellipse,center
-                self.pos = normalize(marker_pos,(frame.width,frame.height),flip_y=True)
+                self.detected = True
+                marker_pos = self.markers[0][0][0]  # first marker, innermost ellipse,center
+                self.pos = normalize(marker_pos, (frame.width, frame.height), flip_y=True)
 
             else:
                 self.detected = False
-                self.pos = None #indicate that no reference is detected
+                self.pos = None  # indicate that no reference is detected
 
             #use np.arrays for per element wise math
             self.display_pos = np.array(self.active_site)
@@ -324,7 +334,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
                 ref["screenpos"] = self.actualScreenPos(screen_pos)
                 self.ref_list.append(ref)
 
-            #always save pupil positions
+            # always save pupil positions
             for p_pt in recent_pupil_positions:
                 if p_pt['confidence'] > self.pupil_confidence_threshold:
                     self.pupil_list.append(p_pt)
@@ -334,6 +344,11 @@ class Screen_Marker_Calibration(Calibration_Plugin):
             for g_p_pt in recent_glint_pupil_positions:
                 if g_p_pt['glint_found'] and g_p_pt['pupil_confidence'] > self.pupil_confidence_threshold:
                     self.glint_pupil_list.append(g_p_pt)
+
+            if on_position and self.detected and events.get('fixations', []):
+                self.screen_marker_state = min(
+                    self.sample_duration+self.lead_in,
+                    self.screen_marker_state+self.fixation_boost)
 
             # Animate the screen marker
             if self.screen_marker_state < self.sample_duration+self.lead_in+self.lead_out+self.black_duration:
@@ -345,17 +360,12 @@ class Screen_Marker_Calibration(Calibration_Plugin):
                     self.stop()
                     return
                 self.active_site = self.sites.pop(0)
-                logger.debug("Moving screen marker to site at %s %s"%tuple(self.active_site))
+                logger.debug("Moving screen marker to site at {} {}".format(*self.active_site))
 
-
-
-            #use np.arrays for per element wise math
+            # use np.arrays for per element wise math
             self.display_pos = np.array(self.active_site)
             self.on_position = on_position
-            self.button.status_text = '%s / %s'%(self.active_site,9)
-
-
-
+            self.button.status_text = '{} / {}'.format(self.active_site, 9)
 
     def gl_display(self):
         """
@@ -369,11 +379,11 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         # debug mode within world will show green ellipses around detected ellipses
         if self.active and self.detected:
             for marker in self.markers:
-                e = marker[-1] #outermost ellipse
-                pts = cv2.ellipse2Poly( (int(e[0][0]),int(e[0][1])),
-                                    (int(e[1][0]/2),int(e[1][1]/2)),
-                                    int(e[-1]),0,360,15)
-                draw_polyline(pts,1,RGBA(0.,1.,0.,1.))
+                e = marker[-1]  # outermost ellipse
+                pts = cv2.ellipse2Poly((int(e[0][0]), int(e[0][1])),
+                                       (int(e[1][0]/2), int(e[1][1]/2)),
+                                       int(e[-1]), 0, 360, 15)
+                draw_polyline(pts, 1, RGBA(0.,1.,0.,1.))
 
         else:
             pass
@@ -474,16 +484,18 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
         glfwMakeContextCurrent(self._window)
         clear_gl_screen()
+
         gl.glColor3f(.80, .80, .8)
         self.draw_rect(0, 0, 2000, 2000)
         self.draw_markers()
+
 
         hdpi_factor = glfwGetFramebufferSize(self._window)[0]/glfwGetWindowSize(self._window)[0]
         r = 110*self.marker_scale * hdpi_factor
         gl.glMatrixMode(gl.GL_PROJECTION)
         gl.glLoadIdentity()
-        p_window_size = glfwGetWindowSize(self._window)
-        gl.glOrtho(0,p_window_size[0],p_window_size[1],0 ,-1,1)
+        p_window_size = glfwGetFramebufferSize(self._window)
+        gl.glOrtho(0, p_window_size[0], p_window_size[1], 0, -1, 1)
         # Switch back to Model View Matrix
         gl.glMatrixMode(gl.GL_MODELVIEW)
         gl.glLoadIdentity()
@@ -494,8 +506,6 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
         #pad = 0.1*1920
         pad = .7*r
-        
-
         screen_pos = map_value(self.display_pos[0],out_range=(pad,p_window_size[0]-pad)),map_value(self.display_pos[1],out_range=(p_window_size[1]-pad,pad))
         alpha = interp_fn(self.screen_marker_state,0.,1.,float(self.sample_duration+self.lead_in+self.lead_out),float(self.lead_in),float(self.sample_duration+self.lead_in))
         if self.screen_marker_state < self.sample_duration+self.lead_in+self.lead_out:
@@ -509,7 +519,7 @@ class Screen_Marker_Calibration(Calibration_Plugin):
 
         #if self.clicks_to_close <5:
         #    self.glfont.set_size(int(p_window_size[0]/30.))
-        #    self.glfont.draw_text(p_window_size[0]/2.,p_window_size[1]/4.,'Touch %s more times to cancel calibration.'%self.clicks_to_close)
+        #   self.glfont.draw_text(p_window_size[0]/2.,p_window_size[1]/4.,'Touch {} more times to cancel calibration.'.format(self.clicks_to_close))
 
         glfwSwapBuffers(self._window)
         glfwMakeContextCurrent(active_window)
@@ -544,5 +554,3 @@ class Screen_Marker_Calibration(Calibration_Plugin):
         if self._window:
             self.close_window()
         self.deinit_gui()
-
-

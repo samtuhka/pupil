@@ -1,11 +1,12 @@
 '''
-(*)~----------------------------------------------------------------------------------
- Pupil - eye tracking platform
- Copyright (C) 2012-2016  Pupil Labs
+(*)~---------------------------------------------------------------------------
+Pupil - eye tracking platform
+Copyright (C) 2012-2017  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
- License details are in the file license.txt, distributed as part of this software.
-----------------------------------------------------------------------------------~(*)
+Distributed under the terms of the GNU
+Lesser General Public License (LGPL v3.0).
+See COPYING and COPYING.LESSER for license details.
+---------------------------------------------------------------------------~(*)
 '''
 
 import numpy as np
@@ -29,7 +30,7 @@ from reference_surface import Reference_Surface
 class Offline_Reference_Surface(Reference_Surface):
     """docstring for Offline_Reference_Surface"""
     def __init__(self,g_pool,name="unnamed",saved_definition=None):
-        super(Offline_Reference_Surface, self).__init__(name,saved_definition)
+        super().__init__(name,saved_definition)
         self.g_pool = g_pool
         self.cache = None
         self.gaze_on_srf = [] # points on surface for realtime feedback display
@@ -67,7 +68,7 @@ class Offline_Reference_Surface(Reference_Surface):
         raise Exception("Invalid cache entry. Please report Bug.")
 
 
-    def update_cache(self,marker_cache,camera_calibration,min_marker_perimeter,idx=None):
+    def update_cache(self,marker_cache,camera_calibration,min_marker_perimeter,min_id_confidence,idx=None):
         '''
         compute surface m's and gaze points from cached marker data
         entries are:
@@ -82,30 +83,30 @@ class Offline_Reference_Surface(Reference_Surface):
             # self.init_cache(marker_cache)
         elif idx != None:
             #update single data pt
-            self.cache.update(idx,self.answer_caching_request(marker_cache,idx,camera_calibration,min_marker_perimeter))
+            self.cache.update(idx,self.answer_caching_request(marker_cache,idx,camera_calibration,min_marker_perimeter,min_id_confidence))
         else:
             # update where marker cache is not False but surface cache is still false
             # this happens when the markercache was incomplete when this fn was run before
             for i in range(len(marker_cache)):
                 if self.cache[i] == False and marker_cache[i] != False:
-                    self.cache.update(i,self.answer_caching_request(marker_cache,i,camera_calibration,min_marker_perimeter))
+                    self.cache.update(i,self.answer_caching_request(marker_cache,i,camera_calibration,min_marker_perimeter,min_id_confidence))
                     # iterations +=1
         # return iterations
 
 
 
-    def init_cache(self,marker_cache,camera_calibration,min_marker_perimeter):
+    def init_cache(self,marker_cache,camera_calibration,min_marker_perimeter,min_id_confidence):
         if self.defined:
-            logger.debug("Full update of surface '%s' positons cache"%self.name)
-            self.cache = Cache_List([self.answer_caching_request(marker_cache,i,camera_calibration,min_marker_perimeter) for i in xrange(len(marker_cache))],positive_eval_fn=lambda x:  (x!=False) and (x!=None))
+            logger.debug("Full update of surface '{}' positons cache".format(self.name))
+            self.cache = Cache_List([self.answer_caching_request(marker_cache,i,camera_calibration,min_marker_perimeter,min_id_confidence) for i in range(len(marker_cache))],positive_eval_fn=lambda x:  (x!=False) and (x!=None))
 
 
-    def answer_caching_request(self,marker_cache,frame_index,camera_calibration,min_marker_perimeter):
+    def answer_caching_request(self,marker_cache,frame_index,camera_calibration,min_marker_perimeter,min_id_confidence):
         visible_markers = marker_cache[frame_index]
         # cache point had not been visited
         if visible_markers == False:
             return False
-        res = self._get_location(visible_markers,camera_calibration,min_marker_perimeter,locate_3d=False)
+        res = self._get_location(visible_markers,camera_calibration,min_marker_perimeter,min_id_confidence,locate_3d=False)
         if res['detected']:
             return res
         else:
@@ -113,17 +114,17 @@ class Offline_Reference_Surface(Reference_Surface):
             return None
 
     def move_vertex(self,vert_idx,new_pos):
-        super(Offline_Reference_Surface, self).move_vertex(vert_idx,new_pos)
+        super().move_vertex(vert_idx,new_pos)
         self.cache = None
         self.heatmap = None
 
-    def add_marker(self,marker,visible_markers,camera_calibration,min_marker_perimeter):
-        super(Offline_Reference_Surface, self).add_marker(marker,visible_markers,camera_calibration,min_marker_perimeter)
+    def add_marker(self,marker,visible_markers,camera_calibration,min_marker_perimeter,min_id_confidence):
+        super().add_marker(marker,visible_markers,camera_calibration,min_marker_perimeter,min_id_confidence)
         self.cache = None
         self.heatmap = None
 
     def remove_marker(self,marker):
-        super(Offline_Reference_Surface, self).remove_marker(marker)
+        super().remove_marker(marker)
         self.cache = None
         self.heatmap = None
 
@@ -194,8 +195,8 @@ class Offline_Reference_Surface(Reference_Surface):
         x = max(1,int(x))
         y = max(1,int(y))
 
-        filter_size = (int(self.heatmap_detail * x)/2)*2 +1
-        std_dev = filter_size /6.
+        filter_size = int(int(self.heatmap_detail * x)/2)*2 +1
+        std_dev = int(filter_size /6.)
         self.heatmap = np.ones((y,x,4),dtype=np.uint8)
         all_gaze = []
 
@@ -203,7 +204,8 @@ class Offline_Reference_Surface(Reference_Surface):
             if c_e:
                 frame_idx+=section.start
                 for gp in self.gaze_on_srf_by_frame_idx(frame_idx,c_e['m_from_screen']):
-                    all_gaze.append(gp['norm_pos'])
+                    if gp['confidence']>=self.g_pool.min_data_confidence:
+                        all_gaze.append(gp['norm_pos'])
 
         if not all_gaze:
             logger.warning("No gaze data on surface for heatmap found.")
@@ -220,7 +222,7 @@ class Offline_Reference_Surface(Reference_Surface):
         hist = np.rot90(hist)
 
         #smoothing..
-        hist = cv2.GaussianBlur(hist, (filter_size,filter_size),std_dev)
+        hist = cv2.GaussianBlur(hist,(filter_size,filter_size),std_dev)
         maxval = np.amax(hist)
         if maxval:
             scale = 255./maxval

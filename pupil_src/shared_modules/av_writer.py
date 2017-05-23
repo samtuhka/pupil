@@ -1,11 +1,12 @@
 '''
-(*)~----------------------------------------------------------------------------------
- Pupil - eye tracking platform
- Copyright (C) 2012-2016  Pupil Labs
+(*)~---------------------------------------------------------------------------
+Pupil - eye tracking platform
+Copyright (C) 2012-2017  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
- License details are in the file license.txt, distributed as part of this software.
-----------------------------------------------------------------------------------~(*)
+Distributed under the terms of the GNU
+Lesser General Public License (LGPL v3.0).
+See COPYING and COPYING.LESSER for license details.
+---------------------------------------------------------------------------~(*)
 '''
 
 """
@@ -13,10 +14,11 @@ av_writer module uses PyAV (ffmpeg or libav backend) to write AV files.
 requires:
     -
 """
+
 import os,sys,platform
 import av
 from av.packet import Packet
-av.logging.set_level(av.logging.ERROR)
+av.logging.set_level(av.logging.DEBUG)
 
 import numpy as np
 from time import time
@@ -29,7 +31,6 @@ logger = logging.getLogger(__name__)
 
 from threading import Thread
 from threading import Event
-
 
 
 """
@@ -57,50 +58,49 @@ The streamtimebase uses the codec timebase as a hint to find a good value.
 The stream timebase in influenced by the contraints/rules of the container as well.
 Only when the header  of the stream is written stream.time_base is garanteed
 to be valid and should only now be accesed.
-
-
-
-
-
 """
+
+
+def write_timestamps(file_loc, timestamps):
+    directory, video_file = os.path.split(file_loc)
+    name, ext = os.path.splitext(video_file)
+    ts_file = '{}_timestamps.npy'.format(name)
+    ts_loc = os.path.join(directory, ts_file)
+    ts = np.array(timestamps)
+    np.save(ts_loc, ts)
+
 
 class AV_Writer(object):
     """
     AV_Writer class
         - file_loc: path to file out
         - video_stream:
-        - audio_stream:
-
 
     We are creating a
     """
 
-    def __init__(self, file_loc,fps=30, video_stream={'codec':'mpeg4','bit_rate': 15000*10e3}, audio_stream=None,use_timestamps=False):
-        super(AV_Writer, self).__init__()
+    def __init__(self, file_loc,fps=30, video_stream={'codec':'mpeg4','bit_rate': 15000*10e3}, use_timestamps=False):
+        super().__init__()
         self.use_timestamps = use_timestamps
+        self.timestamps = []
         # the approximate capture rate.
         self.fps = int(fps)
-        file_loc = str(file_loc) #force str over unicode.
-        try:
-            file_path,ext = file_loc.rsplit('.', 1)
-        except:
-            logger.error("'%s' is not a valid media file name."%file_loc)
-            raise Exception("Error")
+        directory, video_file = os.path.split(file_loc)
+        name, ext = os.path.splitext(video_file)
 
-        if ext not in ('mp4,mov,mkv'):
+        if ext not in ('.mp4', '.mov', '.mkv'):
             logger.warning("media file container should be mp4 or mov. Using a different container is risky.")
 
-        self.ts_file_loc = file_path+'_timestamps_pts.npy'
         self.file_loc = file_loc
-        self.container = av.open(self.file_loc,'w')
-        logger.debug("Opended '%s' for writing."%self.file_loc)
+        self.container = av.open(self.file_loc, 'w')
+        logger.debug("Opened '{}' for writing.".format(self.file_loc))
 
         if self.use_timestamps:
-            self.time_base = Fraction(1,65535) #highest resolution for mp4
+            self.time_base = Fraction(1, 65535)  # highest resolution for mp4
         else:
-            self.time_base = Fraction(1000,self.fps*1000) #timebase is fps
+            self.time_base = Fraction(1000, self.fps*1000)  # timebase is fps
 
-        self.video_stream = self.container.add_stream(video_stream['codec'],1/self.time_base)
+        self.video_stream = self.container.add_stream(video_stream['codec'], 1/self.time_base)
         self.video_stream.bit_rate = video_stream['bit_rate']
         self.video_stream.bit_rate_tolerance = video_stream['bit_rate']/20
         self.video_stream.thread_count = 1
@@ -117,16 +117,16 @@ class AV_Writer(object):
             self.configured = True
             self.start_time = input_frame.timestamp
             if input_frame.yuv_buffer:
-                self.frame = av.VideoFrame(input_frame.width, input_frame.height,'yuv422p')
+                self.frame = av.VideoFrame(input_frame.width, input_frame.height, 'yuv422p')
             else:
-                self.frame = av.VideoFrame(input_frame.width,input_frame.height,'bgr24')
+                self.frame = av.VideoFrame(input_frame.width,input_frame.height, 'bgr24')
             if self.use_timestamps:
                 self.frame.time_base = self.time_base
             else:
                 self.frame.time_base = Fraction(1,self.fps)
 
         if input_frame.yuv_buffer:
-            y,u,v = input_frame.yuv422
+            y, u, v = input_frame.yuv422
             self.frame.planes[0].update(y)
             self.frame.planes[1].update(u)
             self.frame.planes[2].update(v)
@@ -134,17 +134,16 @@ class AV_Writer(object):
             self.frame.planes[0].update(input_frame.img)
 
         if self.use_timestamps:
-            self.frame.pts = int( (input_frame.timestamp-self.start_time)/self.time_base )
+            self.frame.pts = int((input_frame.timestamp-self.start_time)/self.time_base)
         else:
             # our timebase is 1/30  so a frame idx is the correct pts for an fps recorded video.
             self.frame.pts = self.current_frame_idx
-        #send frame of to encoder
+        # send frame of to encoder
         packet = self.video_stream.encode(self.frame)
         if packet:
             self.container.mux(packet)
-        self.current_frame_idx +=1
-
-
+        self.current_frame_idx += 1
+        self.timestamps.append(input_frame.timestamp)
 
     def close(self):
         # flush encoder
@@ -157,7 +156,7 @@ class AV_Writer(object):
 
         self.container.close()
         logger.debug("Closed media container")
-
+        write_timestamps(self.file_loc, self.timestamps)
 
     def release(self):
         self.close()
@@ -168,26 +167,23 @@ class JPEG_Writer(object):
     PyAV based jpeg writer.
     """
 
-    def __init__(self, file_loc,fps=30):
-        super(JPEG_Writer, self).__init__()
+    def __init__(self, file_loc, fps=30):
+        super().__init__()
         # the approximate capture rate.
         self.fps = int(fps)
-        self.time_base = Fraction(1000,self.fps*1000)
-        file_loc = str(file_loc) #force str over unicode.
-        try:
-            file_path,ext = file_loc.rsplit('.', 1)
-        except:
-            logger.error("'%s' is not a valid media file name."%file_loc)
-            raise Exception("Error")
+        self.time_base = Fraction(1000, self.fps*1000)
+        self.timestamps = []
+        directory, video_file = os.path.split(file_loc)
+        name, ext = os.path.splitext(video_file)
 
-        if ext not in ('mp4'):
+        if ext not in ('.mp4'):
             logger.warning("media file container should be mp4. Using a different container is risky.")
 
         self.file_loc = file_loc
-        self.container = av.open(self.file_loc,'w')
-        logger.debug("Opended '%s' for writing."%self.file_loc)
+        self.container = av.open(self.file_loc, 'w')
+        logger.debug("Opened '{}' for writing.".format(self.file_loc))
 
-        self.video_stream = self.container.add_stream('mjpeg',1/self.time_base)
+        self.video_stream = self.container.add_stream('mjpeg', 1/self.time_base)
         self.video_stream.pix_fmt = "yuvj422p"
         self.configured = False
         self.frame_count = 0
@@ -202,38 +198,40 @@ class JPEG_Writer(object):
 
         packet = Packet()
         packet.payload = input_frame.jpeg_buffer
-        #we are setting the packet pts manually this uses a different timebase av.frame!
+        # we are setting the packet pts manually this uses a different timebase av.frame!
         packet.dts = int(self.frame_count/self.video_stream.time_base/self.fps)
         packet.pts = int(self.frame_count/self.video_stream.time_base/self.fps)
-        self.frame_count +=1
+        self.frame_count += 1
         self.container.mux(packet)
-
+        self.timestamps.append(input_frame.timestamp)
 
     def close(self):
-        self.container.close()
+        try:
+            self.container.close()
+        except(RuntimeError):
+            logger.error("Media file does not contain any frames.")
         logger.debug("Closed media container")
+        write_timestamps(self.file_loc, self.timestamps)
 
     def release(self):
         self.close()
 
 
-
-
 def format_time(time, time_base):
         if time is None:
             return 'None'
-        return '%.3fs (%s or %s/%s)' % (time_base * time, time_base * time, time_base.numerator * time, time_base.denominator)
+        return '{:.3f}s ({} or {}/{})'.format(time_base * time, time_base * time, time_base.numerator * time, time_base.denominator)
 
 
-def rec_thread(file_loc, in_container, audio_src,should_close):
+def rec_thread(file_loc, in_container, audio_src, should_close):
     # print sys.modules['av']
     # import av
     if not in_container:
-        #create in container
+        # create in container
         if platform.system() == "Darwin":
-            in_container = av.open('none:%s'%audio_src,format="avfoundation")
+            in_container = av.open('none:{}'.format(audio_src), format="avfoundation")
         elif platform.system() == "Linux":
-            in_container = av.open('hw:%s'%audio_src,format="alsa")
+            in_container = av.open('hw:{}'.format(audio_src), format="alsa")
 
     in_stream = None
 
@@ -251,11 +249,10 @@ def rec_thread(file_loc, in_container, audio_src,should_close):
         # logger.error("No input audio stream found.")
         return
 
-    #create out container
-    out_container = av.open(file_loc,'w')
-    # logger.debug("Opended '%s' for writing."%file_loc)
-    out_stream =  out_container.add_stream(template = in_stream)
-
+    # create out container
+    out_container = av.open(file_loc, 'w')
+    # logger.debug("Opened '%s' for writing."%file_loc)
+    out_stream = out_container.add_stream(template=in_stream)
 
     for packet in in_container.demux(in_stream):
         # for frame in packet.decode():
@@ -277,14 +274,14 @@ class Audio_Capture(object):
     PyAV based audio capture.
     """
 
-    def __init__(self, file_loc,audio_src=0):
-        super(Audio_Capture, self).__init__()
+    def __init__(self, file_loc, audio_src=0):
+        super().__init__()
         self.thread = None
 
         try:
-            file_path,ext = file_loc.rsplit('.', 1)
+            file_path, ext = file_loc.rsplit('.', 1)
         except:
-            logger.error("'%s' is not a valid media file name."%file_loc)
+            logger.error("'{}' is not a valid media file name.".format(file_loc))
             raise Exception("Error")
 
         if ext not in ('wav'):
@@ -295,15 +292,14 @@ class Audio_Capture(object):
 
         self.start(file_loc,audio_src)
 
-    def start(self,file_loc, audio_src):
+    def start(self, file_loc, audio_src):
         self.should_close.clear()
         if platform.system() == "Darwin":
-            in_container = av.open('none:%s'%audio_src,format="avfoundation")
+            in_container = av.open('none:{}'.format(audio_src), format="avfoundation")
         else:
             in_container = None
-        self.thread = Thread(target=rec_thread, args=(file_loc,in_container, audio_src,self.should_close))
+        self.thread = Thread(target=rec_thread, args=(file_loc, in_container, audio_src, self.should_close))
         self.thread.start()
-
 
     def stop(self):
         self.should_close.set()
@@ -321,7 +317,7 @@ class Audio_Capture(object):
 def mac_pyav_hack():
     if platform.system() == "Darwin":
         try:
-            av.open(':0',format="avfoundation")
+            av.open(':0', format="avfoundation")
         except:
             pass
 
@@ -340,7 +336,7 @@ def mac_pyav_hack():
 #     # print writer.video_stream.time_base
 #     # print writer.
 
-#     for x in xrange(300):
+#     for x in range(300):
 #         frame = cap.get_frame()
 #         writer.write_video_frame(frame)
 #         # writer.write(frame.img)
@@ -350,8 +346,6 @@ def mac_pyav_hack():
 #     writer.close()
 
 
-
-
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
 
@@ -359,65 +353,63 @@ if __name__ == '__main__':
 
     import time
     time.sleep(5)
-    cap.close()
-    #mic device
+    cap.cleanup()
+    # mic device
     exit()
-
 
     # container = av.open('hw:0',format="alsa")
     container = av.open('1:0',format="avfoundation")
-    print 'container:', container
-    print '\tformat:', container.format
-    print '\tduration:', float(container.duration) / av.time_base
-    print '\tmetadata:'
-    for k, v in sorted(container.metadata.iteritems()):
-        print '\t\t%s: %r' % (k, v)
-    print
+    print('container:', container)
+    print('\tformat:', container.format)
+    print('\tduration:', float(container.duration) / av.time_base)
+    print('\tmetadata:')
+    for k, v in sorted(container.metadata.items()):
+        print('\t\t{}: {!r}'.format(k, v))
 
-    print len(container.streams), 'stream(s):'
+    print(len(container.streams), 'stream(s):')
     audio_stream = None
     for i, stream in enumerate(container.streams):
 
-        print '\t%r' % stream
-        print '\t\ttime_base: %r' % stream.time_base
-        print '\t\trate: %r' % stream.rate
-        print '\t\tstart_time: %r' % stream.start_time
-        print '\t\tduration: %s' % format_time(stream.duration, stream.time_base)
-        print '\t\tbit_rate: %r' % stream.bit_rate
-        print '\t\tbit_rate_tolerance: %r' % stream.bit_rate_tolerance
+        print('\t{!r}'.format(stream))
+        print('\t\ttime_base: {!r}'.format(stream.time_base))
+        print('\t\trate: {!r}'.format(stream.rate))
+        print('\t\tstart_time: {!r}'.format(stream.start_time))
+        print('\t\tduration: {}'.format(format_time(stream.duration, stream.time_base)))
+        print('\t\tbit_rate: {}'.format(stream.bit_rate))
+        print('\t\tbit_rate_tolerance: {}'.format(stream.bit_rate_tolerance))
 
         if stream.type == b'audio':
-            print '\t\taudio:'
-            print '\t\t\tformat:', stream.format
-            print '\t\t\tchannels: %s' % stream.channels
+            print('\t\taudio:')
+            print('\t\t\tformat:', stream.format)
+            print('\t\t\tchannels: {}'.format(stream.channels))
             audio_stream = stream
             break
         elif stream.type == 'container':
-            print '\t\tcontainer:'
-            print '\t\t\tformat:', stream.format
-            print '\t\t\taverage_rate: %r' % stream.average_rate
+            print('\t\tcontainer:')
+            print('\t\t\tformat:', stream.format)
+            print('\t\t\taverage_rate: {!r}'.format(stream.average_rate))
 
-        print '\t\tmetadata:'
-        for k, v in sorted(stream.metadata.iteritems()):
-            print '\t\t\t%s: %r' % (k, v)
+        print('\t\tmetadata:')
+        for k, v in sorted(stream.metadata.items()):
+            print('\t\t\t{}: {!r}'.format(k, v))
 
     if not audio_stream:
         exit()
-    #file contianer:
 
-    out_container = av.open('test.wav','w')
+    # file contianer:
+    out_container = av.open('test.wav', 'w')
     out_stream = out_container.add_stream(template=audio_stream)
     # out_stream.rate = 44100
-    for i,packet in enumerate(container.demux(audio_stream)):
+    for i, packet in enumerate(container.demux(audio_stream)):
         # for frame in packet.decode():
         #     packet = out_stream.encode(frame)
         #     if packet:
-        print '%r' %packet
-        print '\tduration: %s' % format_time(packet.duration, packet.stream.time_base)
-        print '\tpts: %s' % format_time(packet.pts, packet.stream.time_base)
-        print '\tdts: %s' % format_time(packet.dts, packet.stream.time_base)
+        print('{!r}'.format(packet))
+        print('\tduration: {}'.format(format_time(packet.duration, packet.stream.time_base)))
+        print('\tpts: {}'.format(format_time(packet.pts, packet.stream.time_base)))
+        print('\tdts: {}'.format(format_time(packet.dts, packet.stream.time_base)))
         out_container.mux(packet)
-        if i >1000:
+        if i > 1000:
             break
 
     out_container.close()
@@ -428,4 +420,3 @@ if __name__ == '__main__':
     # gprof2dot_loc = os.path.oin(loc[0], 'pupil_src', 'shared_modules','gprof2dot.py')
     # subthread.call("python "+gprof2dot_loc+" -f pstats av_writer.pstats | dot -Tpng -o av_writer.png", shell=True)
     # print "created cpu time graph for av_writer thread. Please check out the png next to the av_writer.py file"
-

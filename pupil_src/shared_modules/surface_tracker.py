@@ -1,11 +1,12 @@
 '''
-(*)~----------------------------------------------------------------------------------
- Pupil - eye tracking platform
- Copyright (C) 2012-2016  Pupil Labs
+(*)~---------------------------------------------------------------------------
+Pupil - eye tracking platform
+Copyright (C) 2012-2017  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
- License details are in the file license.txt, distributed as part of this software.
-----------------------------------------------------------------------------------~(*)
+Distributed under the terms of the GNU
+Lesser General Public License (LGPL v3.0).
+See COPYING and COPYING.LESSER for license details.
+---------------------------------------------------------------------------~(*)
 '''
 
 import sys, os,platform
@@ -22,7 +23,7 @@ from plugin import Plugin
 import logging
 logger = logging.getLogger(__name__)
 
-from square_marker_detect import detect_markers_robust,detect_markers, draw_markers,m_marker_to_screen
+from square_marker_detect import detect_markers,detect_markers_robust, draw_markers,m_marker_to_screen
 from reference_surface import Reference_Surface
 from calibration_routines.camera_intrinsics_estimation import load_camera_calibration
 
@@ -31,8 +32,8 @@ from math import sqrt
 class Surface_Tracker(Plugin):
     """docstring
     """
-    def __init__(self,g_pool,mode="Show Markers and Surfaces",min_marker_perimeter = 100,invert_image=False):
-        super(Surface_Tracker, self).__init__(g_pool)
+    def __init__(self,g_pool,mode="Show Markers and Surfaces",min_marker_perimeter = 100,invert_image=False,robust_detection=True):
+        super().__init__(g_pool)
         self.order = .2
 
         # all markers that are detected in the most recent frame
@@ -50,9 +51,10 @@ class Surface_Tracker(Plugin):
         self.running = True
 
 
-        self.robust_detection = 1
+        self.robust_detection = robust_detection
         self.aperture = 11
         self.min_marker_perimeter = min_marker_perimeter
+        self.min_id_confidence = 0.0
         self.locate_3d = False
         self.invert_image = invert_image
 
@@ -64,10 +66,17 @@ class Surface_Tracker(Plugin):
 
     def load_surface_definitions_from_file(self):
         # all registered surfaces
-        self.surface_definitions = Persistent_Dict(os.path.join(self.g_pool.user_dir,'surface_definitions') )
-        self.surfaces = [Reference_Surface(saved_definition=d) for d in  self.surface_definitions.get('realtime_square_marker_surfaces',[]) if isinstance(d,dict)]
+        self.surface_definitions = Persistent_Dict(os.path.join(self.g_pool.user_dir,'surface_definitions'))
+        self.surfaces = [Reference_Surface(saved_definition=d) for d in self.surface_definitions.get('realtime_square_marker_surfaces',[])]
 
+    def save_surface_definitions_to_file(self):
+        self.surface_definitions["realtime_square_marker_surfaces"] = [rs.save_to_dict() for rs in self.surfaces if rs.defined]
+        self.surface_definitions.save()
 
+    def on_notify(self,notification):
+        if notification['subject'] == 'surfaces_changed':
+            logger.info('Surfaces changed. Saving to file.')
+            self.save_surface_definitions_to_file()
     def on_click(self,pos,button,action):
         if self.mode == 'Show Markers and Surfaces':
             if action == GLFW_PRESS:
@@ -85,6 +94,9 @@ class Surface_Tracker(Plugin):
                             self.marker_edit_surface = s
 
             if action == GLFW_RELEASE:
+                if self.edit_surf_verts:
+                    # if we had draged a vertex lets let other know the surfaces changed.
+                    self.notify_all({'subject': 'surfaces_changed', 'delay': 2})
                 self.edit_surf_verts = []
 
             elif action == GLFW_PRESS:
@@ -103,13 +115,17 @@ class Surface_Tracker(Plugin):
                         if m['perimeter']>=self.min_marker_perimeter:
                             vx,vy = m['centroid']
                             if sqrt((x-vx)**2 + (y-vy)**2) <15:
-                                if self.marker_edit_surface.markers.has_key(m['id']):
+                                if m['id'] in self.marker_edit_surface.markers:
                                     self.marker_edit_surface.remove_marker(m)
+                                    self.notify_all({'subject':'surfaces_changed','delay':1})
                                 else:
-                                    self.marker_edit_surface.add_marker(m,self.markers,self.camera_calibration,self.min_marker_perimeter)
+                                    self.marker_edit_surface.add_marker(m,self.markers,self.camera_calibration,self.min_marker_perimeter,self.min_id_confidence)
+                                    self.notify_all({'subject':'surfaces_changed','delay':1})
 
-    def add_surface(self,_):
-        self.surfaces.append(Reference_Surface())
+    def add_surface(self, _):
+        surf = Reference_Surface()
+        surf.on_finish_define = self.save_surface_definitions_to_file
+        self.surfaces.append(surf)
         self.update_gui_markers()
 
     def remove_surface(self,i):
@@ -119,19 +135,19 @@ class Surface_Tracker(Plugin):
         if remove_surface in self.edit_surfaces:
             self.edit_surfaces.remove(remove_surface)
 
-
         self.surfaces[i].cleanup()
         del self.surfaces[i]
         self.update_gui_markers()
+        self.notify_all({'subject': 'surfaces_changed'})
 
     def init_gui(self):
         self.menu = ui.Growing_Menu('Surface Tracker')
         self.g_pool.sidebar.append(self.menu)
 
-        self.button = ui.Thumb('running',self,label='Track',hotkey='t')
+        self.button = ui.Thumb('running',self,label='T',hotkey='t')
         self.button.on_color[:] = (.1,.2,1.,.8)
         self.g_pool.quickbar.append(self.button)
-        self.add_button = ui.Thumb('add_surface',setter=self.add_surface,getter=lambda:False,label='Add surface',hotkey='a')
+        self.add_button = ui.Thumb('add_surface',setter=self.add_surface,getter=lambda:False,label='A',hotkey='a')
         self.g_pool.quickbar.append(self.add_button)
         self.update_gui_markers()
 
@@ -156,18 +172,18 @@ class Surface_Tracker(Plugin):
         self.menu.append(ui.Info_Text('This plugin detects and tracks fiducial markers visible in the scene. You can define surfaces using 1 or more marker visible within the world view by clicking *add surface*. You can edit defined surfaces by selecting *Surface edit mode*.'))
         self.menu.append(ui.Switch('robust_detection',self,label='Robust detection'))
         self.menu.append(ui.Switch('invert_image',self,label='Use inverted markers'))
-        self.menu.append(ui.Slider('min_marker_perimeter',self,step=1,min=10,max=500))
+        self.menu.append(ui.Slider('min_marker_perimeter',self,step=1,min=10,max=100))
         self.menu.append(ui.Switch('locate_3d',self,label='3D localization'))
         self.menu.append(ui.Selector('mode',self,label="Mode",selection=['Show Markers and Surfaces','Show marker IDs'] ))
         self.menu.append(ui.Button("Add surface", lambda:self.add_surface('_'),))
 
         for s in self.surfaces:
             idx = self.surfaces.index(s)
-            s_menu = ui.Growing_Menu("Surface %s"%idx)
+            s_menu = ui.Growing_Menu("Surface {}".format(idx))
             s_menu.collapsed=True
             s_menu.append(ui.Text_Input('name',s))
-            s_menu.append(ui.Text_Input('x',s.real_world_size,label='X size'))
-            s_menu.append(ui.Text_Input('y',s.real_world_size,label='Y size'))
+            s_menu.append(ui.Text_Input('x', s.real_world_size, label='X size'))
+            s_menu.append(ui.Text_Input('y', s.real_world_size, label='Y size'))
             s_menu.append(ui.Button('Open Debug Window',s.open_close_window))
             #closure to encapsulate idx
             def make_remove_s(i):
@@ -181,38 +197,39 @@ class Surface_Tracker(Plugin):
 
         if self.running:
             gray = frame.gray
+            if self.invert_image:
+                gray = 255-gray
 
-            self.markers = detect_markers_robust(gray,
-                                                grid_size = 5,
-                                                prev_markers=self.markers,
-                                                min_marker_perimeter=self.min_marker_perimeter,
-                                                aperture=self.aperture,
-                                                visualize=0,
-                                                true_detect_every_frame=3 if self.robust_detection else 1,
-                                                invert_image=self.invert_image)
-
-
-
+            if self.robust_detection:
+                self.markers = detect_markers_robust(
+                    gray, grid_size = 5,aperture=self.aperture,
+                    prev_markers=self.markers,
+                    true_detect_every_frame=3,
+                    min_marker_perimeter=self.min_marker_perimeter)
+            else:
+                self.markers = detect_markers(
+                    gray, grid_size = 5,aperture=self.aperture,
+                    min_marker_perimeter=self.min_marker_perimeter)
             if self.mode == "Show marker IDs":
                 draw_markers(frame.gray,self.markers)
 
 
         # locate surfaces, map gaze
         for s in self.surfaces:
-            s.locate(self.markers,self.camera_calibration,self.min_marker_perimeter, self.locate_3d)
+            s.locate(self.markers,self.camera_calibration,self.min_marker_perimeter,self.min_id_confidence, self.locate_3d)
             if s.detected:
                 s.gaze_on_srf = s.map_data_to_surface(events.get('gaze_positions',[]),s.m_from_screen)
             else:
                 s.gaze_on_srf =[]
 
-        events['surface'] = []
+        events['surfaces'] = []
         for s in self.surfaces:
             if s.detected:
-                events['surface'].append({'name':s.name,'uid':s.uid,'m_to_screen':s.m_to_screen.tolist(),'m_from_screen':s.m_from_screen.tolist(),'gaze_on_srf': s.gaze_on_srf, 'timestamp':frame.timestamp,'camera_pose_3d':s.camera_pose_3d.tolist() if s.camera_pose_3d is not None else None})
+                events['surfaces'].append({'name':s.name,'uid':s.uid,'m_to_screen':s.m_to_screen.tolist(),'m_from_screen':s.m_from_screen.tolist(),'gaze_on_srf': s.gaze_on_srf, 'timestamp':frame.timestamp,'camera_pose_3d':s.camera_pose_3d.tolist() if s.camera_pose_3d is not None else None})
 
 
         if self.running:
-            self.button.status_text = '%s/%s'%(len([s for s in self.surfaces if s.detected]),len(self.surfaces))
+            self.button.status_text = '{}/{}'.format(len([s for s in self.surfaces if s.detected]), len(self.surfaces))
         else:
             self.button.status_text = 'tracking paused'
 
@@ -229,8 +246,12 @@ class Surface_Tracker(Plugin):
 
 
 
+
+
+
+
     def get_init_dict(self):
-        return {'mode':self.mode,'min_marker_perimeter':self.min_marker_perimeter}
+        return {'mode':self.mode,'min_marker_perimeter':self.min_marker_perimeter,'invert_image':self.invert_image,'robust_detection':self.robust_detection}
 
 
     def gl_display(self):
@@ -241,7 +262,7 @@ class Surface_Tracker(Plugin):
             for m in self.markers:
                 hat = np.array([[[0,0],[0,1],[.5,1.3],[1,1],[1,0],[0,0]]],dtype=np.float32)
                 hat = cv2.perspectiveTransform(hat,m_marker_to_screen(m))
-                if m['perimeter']>=self.min_marker_perimeter:
+                if m['perimeter']>=self.min_marker_perimeter and m['id_confidence']>self.min_id_confidence:
                     draw_polyline(hat.reshape((6,2)),color=RGBA(0.1,1.,1.,.5))
                     draw_polyline(hat.reshape((6,2)),color=RGBA(0.1,1.,1.,.3),line_type=GL_POLYGON)
                 else:
@@ -260,7 +281,7 @@ class Surface_Tracker(Plugin):
                 exc = []
                 for m in self.markers:
                     if m['perimeter']>=self.min_marker_perimeter:
-                        if self.marker_edit_surface.markers.has_key(m['id']):
+                        if m['id'] in self.marker_edit_surface.markers:
                             inc.append(m['centroid'])
                         else:
                             exc.append(m['centroid'])
@@ -280,8 +301,7 @@ class Surface_Tracker(Plugin):
         This happens either voluntarily or forced.
         if you have a GUI or glfw window destroy it here.
         """
-        self.surface_definitions["realtime_square_marker_surfaces"] = [rs.save_to_dict() for rs in self.surfaces if rs.defined]
-        self.surface_definitions.close()
+        self.save_surface_definitions_to_file()
 
         for s in self.surfaces:
             s.cleanup()

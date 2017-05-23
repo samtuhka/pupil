@@ -1,33 +1,27 @@
 '''
-(*)~----------------------------------------------------------------------------------
- Pupil - eye tracking platform
- Copyright (C) 2012-2016  Pupil Labs
+(*)~---------------------------------------------------------------------------
+Pupil - eye tracking platform
+Copyright (C) 2012-2017  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
- License details are in the file license.txt, distributed as part of this software.
-----------------------------------------------------------------------------------~(*)
+Distributed under the terms of the GNU
+Lesser General Public License (LGPL v3.0).
+See COPYING and COPYING.LESSER for license details.
+---------------------------------------------------------------------------~(*)
 '''
 
-import sys, os,platform
+import sys, os
 import cv2
 import numpy as np
 import csv
+import multiprocessing as mp
 
-
-if platform.system() == 'Darwin':
-    from billiard import Process,Queue,forking_enable
-    from billiard.sharedctypes import Value
-else:
-    from multiprocessing import Process, Queue
-    forking_enable = lambda x: x #dummy fn
-    from multiprocessing.sharedctypes import Value
 from ctypes import c_bool
 
 
 from itertools import chain
 from OpenGL.GL import *
-from methods import normalize,denormalize
-from file_methods import Persistent_Dict,save_object
+from methods import normalize
+from file_methods import Persistent_Dict
 from cache_list import Cache_List
 from glfw import *
 from pyglui import ui
@@ -39,7 +33,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from surface_tracker import Surface_Tracker
-from square_marker_detect import detect_markers_robust, draw_markers,m_marker_to_screen
+from square_marker_detect import draw_markers,m_marker_to_screen
 from calibration_routines.camera_intrinsics_estimation import load_camera_calibration
 from offline_reference_surface import Offline_Reference_Surface
 from math import sqrt
@@ -55,43 +49,53 @@ class Offline_Surface_Tracker(Surface_Tracker):
     See marker_tracker.py for more info on this marker tracker.
     """
 
-    def __init__(self,g_pool,mode="Show Markers and Surfaces",min_marker_perimeter = 100):
-        super(Offline_Surface_Tracker, self).__init__(g_pool,mode,min_marker_perimeter)
+    def __init__(self,g_pool,mode="Show Markers and Surfaces",min_marker_perimeter = 100,invert_image=False,robust_detection=True):
+        super().__init__(g_pool,mode,min_marker_perimeter,invert_image,robust_detection,)
         self.order = .2
-
+        self.marker_cache_version = 2
+        self.min_marker_perimeter_cacher = 20  #find even super small markers. The surface locater will filter using min_marker_perimeter
         if g_pool.app == 'capture':
            raise Exception('For Player only.')
 
-        self.marker_cache_version = 1
-        self.min_marker_perimeter_cacher = 20  #find even super small markers. The surface locater will filter using min_marker_perimeter
+        self.load_marker_cache()
+        self.init_marker_cacher()
+        for s in self.surfaces:
+            s.init_cache(self.cache,self.camera_calibration,self.min_marker_perimeter,self.min_id_confidence)
+        self.recalculate()
+
+
+    def load_marker_cache(self):
         #check if marker cache is available from last session
-        self.persistent_cache = Persistent_Dict(os.path.join(g_pool.rec_dir,'square_marker_cache'))
+        self.persistent_cache = Persistent_Dict(os.path.join(self.g_pool.rec_dir,'square_marker_cache'))
         version = self.persistent_cache.get('version',0)
         cache = self.persistent_cache.get('marker_cache',None)
         if cache is None:
-            self.cache = Cache_List([False for _ in g_pool.timestamps])
+            self.cache = Cache_List([False for _ in self.g_pool.timestamps])
             self.persistent_cache['version'] = self.marker_cache_version
+            self.persistent_cache['inverted_markers'] = self.invert_image
         elif version != self.marker_cache_version:
             self.persistent_cache['version'] = self.marker_cache_version
-            self.cache = Cache_List([False for _ in g_pool.timestamps])
+            self.invert_image = self.persistent_cache.get('inverted_markers',False)
+            self.cache = Cache_List([False for _ in self.g_pool.timestamps])
             logger.debug("Marker cache version missmatch. Rebuilding marker cache.")
         else:
             self.cache = Cache_List(cache)
-            logger.debug("Loaded marker cache %s / %s frames had been searched before"%(len(self.cache)-self.cache.count(False),len(self.cache)) )
+            #we overwrite the inverted_image setting from init with the one save in the marker cache.
+            self.invert_image = self.persistent_cache.get('inverted_markers',False)
+            logger.debug("Loaded marker cache {} / {} frames had been searched before".format(len(self.cache)-self.cache.count(False),len(self.cache)) )
 
-        self.init_marker_cacher()
-        for s in self.surfaces:
-            s.init_cache(self.cache,self.camera_calibration,self.min_marker_perimeter)
-        self.recalculate()
+    def clear_marker_cache(self):
+        self.cache = Cache_List([False for _ in self.g_pool.timestamps])
+        self.persistent_cache['version'] = self.marker_cache_version
 
     def load_surface_definitions_from_file(self):
         self.surface_definitions = Persistent_Dict(os.path.join(self.g_pool.rec_dir,'surface_definitions'))
         if self.surface_definitions.get('offline_square_marker_surfaces',[]) != []:
             logger.debug("Found ref surfaces defined or copied in previous session.")
-            self.surfaces = [Offline_Reference_Surface(self.g_pool,saved_definition=d) for d in self.surface_definitions.get('offline_square_marker_surfaces',[]) if isinstance(d,dict)]
+            self.surfaces = [Offline_Reference_Surface(self.g_pool,saved_definition=d) for d in self.surface_definitions.get('offline_square_marker_surfaces',[])]
         elif self.surface_definitions.get('realtime_square_marker_surfaces',[]) != []:
             logger.debug("Did not find ref surfaces def created or used by the user in player from earlier session. Loading surfaces defined during capture.")
-            self.surfaces = [Offline_Reference_Surface(self.g_pool,saved_definition=d) for d in self.surface_definitions.get('realtime_square_marker_surfaces',[]) if isinstance(d,dict)]
+            self.surfaces = [Offline_Reference_Surface(self.g_pool,saved_definition=d) for d in self.surface_definitions.get('realtime_square_marker_surfaces',[])]
         else:
             logger.debug("No surface defs found. Please define using GUI.")
             self.surfaces = []
@@ -100,7 +104,7 @@ class Offline_Surface_Tracker(Surface_Tracker):
     def init_gui(self):
         self.menu = ui.Scrolling_Menu('Offline Surface Tracker')
         self.g_pool.gui.append(self.menu)
-        self.add_button = ui.Thumb('add_surface',setter=lambda x: self.add_surface(),getter=lambda:False,label='Add Surface',hotkey='a')
+        self.add_button = ui.Thumb('add_surface',setter=lambda x: self.add_surface(),getter=lambda:False,label='A',hotkey='a')
         self.g_pool.quickbar.append(self.add_button)
         self.update_gui_markers()
 
@@ -122,8 +126,14 @@ class Offline_Surface_Tracker(Surface_Tracker):
             self.min_marker_perimeter = val
             self.notify_all({'subject':'min_marker_perimeter_changed','delay':1})
 
+        def set_invert_image(val):
+            self.invert_image = val
+            self.invalidate_marker_cache()
+            self.invalidate_surface_caches()
+
         self.menu.elements[:] = []
         self.menu.append(ui.Button('Close',close))
+        self.menu.append(ui.Switch('invert_image',self,setter=set_invert_image,label='Use inverted markers'))
         self.menu.append(ui.Slider('min_marker_perimeter',self,min=20,max=500,step=1,setter=set_min_marker_perimeter))
         self.menu.append(ui.Info_Text('The offline surface tracker will look for markers in the entire video. By default it uses surfaces defined in capture. You can change and add more surfaces here.'))
         self.menu.append(ui.Info_Text("Press the export button or type 'e' to start the export."))
@@ -133,7 +143,7 @@ class Offline_Surface_Tracker(Surface_Tracker):
         self.menu.append(ui.Button("Add surface", lambda:self.add_surface()))
         for s in self.surfaces:
             idx = self.surfaces.index(s)
-            s_menu = ui.Growing_Menu("Surface %s"%idx)
+            s_menu = ui.Growing_Menu("Surface {}".format(idx))
             s_menu.collapsed=True
             s_menu.append(ui.Text_Input('name',s))
             s_menu.append(ui.Text_Input('x',s.real_world_size,label='X size'))
@@ -151,11 +161,14 @@ class Offline_Surface_Tracker(Surface_Tracker):
         if notification['subject'] == 'gaze_positions_changed':
             logger.info('Gaze postions changed. Recalculating.')
             self.recalculate()
+        if notification['subject'] == 'min_data_confidence_changed':
+            logger.info('Min_data_confidence changed. Recalculating.')
+            self.recalculate()
         elif notification['subject'] == 'surfaces_changed':
             logger.info('Surfaces changed. Recalculating.')
             self.recalculate()
         elif notification['subject'] == 'min_marker_perimeter_changed':
-            logger.info('Min marper perimeter adjusted. Re-detecting surfaces.')
+            logger.info('Min marker perimeter adjusted. Re-detecting surfaces.')
             self.invalidate_surface_caches()
         elif notification['subject'] is "should_export":
             self.save_surface_statsics_to_file(notification['range'],notification['export_dir'])
@@ -210,7 +223,10 @@ class Offline_Surface_Tracker(Surface_Tracker):
         for s in self.surfaces:
             s.cache = None
 
-    def update(self,frame,events):
+    def recent_events(self,events):
+        frame = events.get('frame')
+        if not frame:
+            return
         self.img_shape = frame.img.shape
         self.update_marker_cache()
         # self.markers = [m for m in self.cache[frame.index] if m['perimeter'>=self.min_marker_perimeter]
@@ -224,9 +240,9 @@ class Offline_Surface_Tracker(Surface_Tracker):
         # locate surfaces
         for s in self.surfaces:
             if not s.locate_from_cache(frame.index):
-                s.locate(self.markers,self.camera_calibration,self.min_marker_perimeter)
+                s.locate(self.markers,self.camera_calibration,self.min_marker_perimeter,self.min_id_confidence)
             if s.detected:
-                events['surfaces'].append({'name':s.name,'uid':s.uid,'m_to_screen':s.m_to_screen,'m_from_screen':s.m_from_screen, 'timestamp':frame.timestamp})
+                events['surfaces'].append({'name':s.name,'uid':s.uid,'m_to_screen':s.m_to_screen.tolist(),'m_from_screen':s.m_from_screen.tolist(),'gaze_on_srf': s.gaze_on_srf, 'timestamp':frame.timestamp,'camera_pose_3d':s.camera_pose_3d.tolist() if s.camera_pose_3d is not None else None})
 
         if self.mode == "Show marker IDs":
             draw_markers(frame.img,self.markers)
@@ -244,8 +260,8 @@ class Offline_Surface_Tracker(Surface_Tracker):
             else:
                 # update srf with no or invald cache:
                 for s in self.surfaces:
-                    if s.cache == None and s not in [s for s,i in self.edit_surf_verts]:
-                        s.init_cache(self.cache,self.camera_calibration,self.min_marker_perimeter)
+                    if s.cache == None:
+                        s.init_cache(self.cache,self.camera_calibration,self.min_marker_perimeter,self.min_id_confidence)
                         self.notify_all({'subject':'surfaces_changed','delay':1})
 
 
@@ -257,17 +273,20 @@ class Offline_Surface_Tracker(Surface_Tracker):
             if s.window_should_open:
                 s.open_window()
 
+    def invalidate_marker_cache(self):
+        self.close_marker_cacher()
+        self.clear_marker_cache()
+        self.init_marker_cacher()
 
     def init_marker_cacher(self):
-        forking_enable(0) #for MacOs only
         from marker_detector_cacher import fill_cache
         visited_list = [False if x == False else True for x in self.cache]
-        video_file_path =  self.g_pool.capture.src
+        video_file_path =  self.g_pool.capture.source_path
         timestamps = self.g_pool.capture.timestamps
-        self.cache_queue = Queue()
-        self.cacher_seek_idx = Value('i',0)
-        self.cacher_run = Value(c_bool,True)
-        self.cacher = Process(target=fill_cache, args=(visited_list,video_file_path,timestamps,self.cache_queue,self.cacher_seek_idx,self.cacher_run,self.min_marker_perimeter_cacher))
+        self.cache_queue = mp.Queue()
+        self.cacher_seek_idx = mp.Value('i',0)
+        self.cacher_run = mp.Value(c_bool,True)
+        self.cacher = mp.Process(target=fill_cache, args=(visited_list,video_file_path,timestamps,self.cache_queue,self.cacher_seek_idx,self.cacher_run,self.min_marker_perimeter_cacher,self.invert_image))
         self.cacher.start()
 
     def update_marker_cache(self):
@@ -275,7 +294,7 @@ class Offline_Surface_Tracker(Surface_Tracker):
             idx,c_m = self.cache_queue.get()
             self.cache.update(idx,c_m)
             for s in self.surfaces:
-                s.update_cache(self.cache,camera_calibration=self.camera_calibration,min_marker_perimeter=self.min_marker_perimeter,idx=idx)
+                s.update_cache(self.cache,camera_calibration=self.camera_calibration,min_marker_perimeter=self.min_marker_perimeter,min_id_confidence=self.min_id_confidence,idx=idx)
             if self.cacher_run.value == False:
                 self.recalculate()
 
@@ -285,7 +304,10 @@ class Offline_Surface_Tracker(Surface_Tracker):
     def close_marker_cacher(self):
         self.update_marker_cache()
         self.cacher_run.value = False
-        self.cacher.join()
+        self.cacher.join(1.0)
+        if self.cacher.is_alive():
+            logger.error("Marker cacher unresponsive - terminating.")
+            self.cacher.terminate()
 
     def gl_display(self):
         """
@@ -293,7 +315,7 @@ class Offline_Surface_Tracker(Surface_Tracker):
         """
         self.gl_display_cache_bars()
 
-        super(Offline_Surface_Tracker,self).gl_display()
+        super().gl_display()
 
         if self.mode == "Show Heatmaps":
             for s in  self.surfaces:
@@ -307,7 +329,7 @@ class Offline_Surface_Tracker(Surface_Tracker):
     def gl_display_cache_bars(self):
         """
         """
-        padding = 20.
+        padding = 30.
 
        # Lines for areas that have been cached
         cached_ranges = []
@@ -378,18 +400,18 @@ class Offline_Surface_Tracker(Surface_Tracker):
         section = export_range
         in_mark = export_range.start
         out_mark = export_range.stop
-        logger.info("exporting metrics to %s"%metrics_dir)
+        logger.info("exporting metrics to {}".format(metrics_dir))
         if os.path.isdir(metrics_dir):
             logger.info("Will overwrite previous export for this section")
         else:
             try:
                 os.mkdir(metrics_dir)
             except:
-                logger.warning("Could not make metrics dir %s"%metrics_dir)
+                logger.warning("Could not make metrics dir {}".format(metrics_dir))
                 return
 
 
-        with open(os.path.join(metrics_dir,'surface_visibility.csv'),'wb') as csvfile:
+        with open(os.path.join(metrics_dir,'surface_visibility.csv'),'w',encoding='utf-8',newline='') as csvfile:
             csv_writer = csv.writer(csvfile, delimiter=',')
 
             # surface visibility report
@@ -407,7 +429,7 @@ class Offline_Surface_Tracker(Surface_Tracker):
             logger.info("Created 'surface_visibility.csv' file")
 
 
-        with open(os.path.join(metrics_dir,'surface_gaze_distribution.csv'),'wb') as csvfile:
+        with open(os.path.join(metrics_dir,'surface_gaze_distribution.csv'),'w',encoding='utf-8',newline='') as csvfile:
             csv_writer = csv.writer(csvfile, delimiter=',')
 
             # gaze distribution report
@@ -429,7 +451,7 @@ class Offline_Surface_Tracker(Surface_Tracker):
 
 
 
-        with open(os.path.join(metrics_dir,'surface_events.csv'),'wb') as csvfile:
+        with open(os.path.join(metrics_dir,'surface_events.csv'),'w',encoding='utf-8',newline='') as csvfile:
             csv_writer = csv.writer(csvfile, delimiter=',')
 
             # surface events report
@@ -451,12 +473,8 @@ class Offline_Surface_Tracker(Surface_Tracker):
             # per surface names:
             surface_name = '_'+s.name.replace('/','')+'_'+s.uid
 
-
-            # save surface_positions as pickle file
-            save_object(s.cache.to_list(),os.path.join(metrics_dir,'srf_positions'+surface_name))
-
             #save surface_positions as csv
-            with open(os.path.join(metrics_dir,'srf_positons'+surface_name+'.csv'),'wb') as csvfile:
+            with open(os.path.join(metrics_dir,'srf_positons'+surface_name+'.csv'),'w',encoding='utf-8',newline='') as csvfile:
                 csv_writer =csv.writer(csvfile, delimiter=',')
                 csv_writer.writerow(('frame_idx','timestamp','m_to_screen','m_from_screen','detected_markers'))
                 for idx,ts,ref_srf_data in zip(range(len(self.g_pool.timestamps)),self.g_pool.timestamps,s.cache):
@@ -466,7 +484,7 @@ class Offline_Surface_Tracker(Surface_Tracker):
 
 
             # save gaze on srf as csv.
-            with open(os.path.join(metrics_dir,'gaze_positions_on_surface'+surface_name+'.csv'),'wb') as csvfile:
+            with open(os.path.join(metrics_dir,'gaze_positions_on_surface'+surface_name+'.csv'),'w',encoding='utf-8',newline='') as csvfile:
                 csv_writer = csv.writer(csvfile, delimiter=',')
                 csv_writer.writerow(('world_timestamp','world_frame_idx','gaze_timestamp','x_norm','y_norm','x_scaled','y_scaled','on_srf'))
                 for idx,ts,ref_srf_data in zip(range(len(self.g_pool.timestamps)),self.g_pool.timestamps,s.cache):
@@ -477,7 +495,7 @@ class Offline_Surface_Tracker(Surface_Tracker):
 
 
             # save fixation on srf as csv.
-            with open(os.path.join(metrics_dir,'fixations_on_surface'+surface_name+'.csv'),'wb') as csvfile:
+            with open(os.path.join(metrics_dir,'fixations_on_surface'+surface_name+'.csv'),'w',encoding='utf-8',newline='') as csvfile:
                 csv_writer = csv.writer(csvfile, delimiter=',')
                 csv_writer.writerow(('id','start_timestamp','duration','start_frame','end_frame','norm_pos_x','norm_pos_y','x_scaled','y_scaled','on_srf'))
                 fixations_on_surface = []
@@ -487,15 +505,15 @@ class Offline_Surface_Tracker(Surface_Tracker):
                             for f in s.fixations_on_srf_by_frame_idx(idx,ref_srf_data['m_from_screen']):
                                 fixations_on_surface.append(f)
 
-                removed_dublicates = dict([(f['base_data']['id'],f) for f in fixations_on_surface]).values()
-                for f_on_s in removed_dublicates:
+                removed_duplicates = dict([(f['base_data']['id'],f) for f in fixations_on_surface]).values()
+                for f_on_s in removed_duplicates:
                     f = f_on_s['base_data']
                     f_x,f_y = f_on_s['norm_pos']
                     f_on_srf = f_on_s['on_srf']
                     csv_writer.writerow( (f['id'],f['timestamp'],f['duration'],f['start_frame_index'],f['end_frame_index'],f_x,f_y,f_x*s.real_world_size['x'],f_y*s.real_world_size['y'],f_on_srf) )
 
 
-            logger.info("Saved surface positon gaze and fixation data for '%s' with uid:'%s'"%(s.name,s.uid))
+            logger.info("Saved surface positon gaze and fixation data for '{}' with uid:'{}'".format(s.name,s.uid))
 
             if s.heatmap is not None:
                 logger.info("Saved Heatmap as .png file.")
@@ -535,10 +553,10 @@ class Offline_Surface_Tracker(Surface_Tracker):
         self.surface_definitions.close()
 
         self.close_marker_cacher()
+        self.persistent_cache['inverted_markers'] = self.invert_image
         self.persistent_cache["marker_cache"] = self.cache.to_list()
         self.persistent_cache.close()
 
         for s in self.surfaces:
             s.close_window()
         self.deinit_gui()
-

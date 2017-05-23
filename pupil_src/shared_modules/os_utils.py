@@ -1,14 +1,16 @@
 '''
-(*)~----------------------------------------------------------------------------------
- Pupil - eye tracking platform
- Copyright (C) 2012-2016  Pupil Labs
+(*)~---------------------------------------------------------------------------
+Pupil - eye tracking platform
+Copyright (C) 2012-2017  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
- License details are in the file license.txt, distributed as part of this software.
-----------------------------------------------------------------------------------~(*)
+Distributed under the terms of the GNU
+Lesser General Public License (LGPL v3.0).
+See COPYING and COPYING.LESSER for license details.
+---------------------------------------------------------------------------~(*)
 '''
 
 import platform, sys, os, time
+from distutils.version import LooseVersion as VersionFormat
 import subprocess as sp
 
 import logging
@@ -16,10 +18,10 @@ logger = logging.getLogger(__name__)
 
 os_name = platform.system()
 if os_name == "Darwin":
-    mac_version = platform.mac_ver()
-    mac_major,mac_minor,mac_patch = map(int,mac_version[0].split('.'))
+    mac_version = VersionFormat(platform.mac_ver()[0])
+    min_version = VersionFormat("10.11.0")
 
-if os_name == "Darwin" and mac_minor >=11:
+if os_name == "Darwin" and mac_version >= min_version:
 
     class Prevent_Idle_Sleep(object):
 

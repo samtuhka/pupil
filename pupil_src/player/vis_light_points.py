@@ -1,11 +1,12 @@
 '''
-(*)~----------------------------------------------------------------------------------
- Pupil - eye tracking platform
- Copyright (C) 2012-2016  Pupil Labs
+(*)~---------------------------------------------------------------------------
+Pupil - eye tracking platform
+Copyright (C) 2012-2017  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
- License details are in the file license.txt, distributed as part of this software.
-----------------------------------------------------------------------------------~(*)
+Distributed under the terms of the GNU
+Lesser General Public License (LGPL v3.0).
+See COPYING and COPYING.LESSER for license details.
+---------------------------------------------------------------------------~(*)
 '''
 
 import cv2
@@ -25,7 +26,7 @@ class Vis_Light_Points(Plugin):
     uniqueness = "not_unique"
 
     def __init__(self, g_pool,falloff = 20):
-        super(Vis_Light_Points, self).__init__(g_pool)
+        super().__init__(g_pool)
         self.order = .8
         self.menu = None
 
@@ -35,18 +36,18 @@ class Vis_Light_Points(Plugin):
         falloff = self.falloff
 
         img = frame.img
-        screen_gaze = [denormalize(g['norm_pos'],self.g_pool.capture.frame_size,flip_y=True) for g in events.get('gaze_positions',[])]
+        pts = [denormalize(pt['norm_pos'],frame.img.shape[:-1][::-1],flip_y=True) for pt in events.get('gaze_positions',[]) if pt['confidence']>=self.g_pool.min_data_confidence]
 
         overlay = np.ones(img.shape[:-1],dtype=img.dtype)
 
         # draw recent gaze postions as black dots on an overlay image.
-        for gaze_point in screen_gaze:
+        for gaze_point in pts:
             try:
                 overlay[int(gaze_point[1]),int(gaze_point[0])] = 0
             except:
                 pass
 
-        out = cv2.distanceTransform(overlay,cv2.cv.CV_DIST_L2, 5)
+        out = cv2.distanceTransform(overlay,cv2.DIST_L2, 5)
 
         # fix for opencv binding inconsitency
         if type(out)==tuple:
@@ -54,7 +55,7 @@ class Vis_Light_Points(Plugin):
 
         overlay =  1/(out/falloff+1)
 
-        img *= cv2.cvtColor(overlay,cv2.COLOR_GRAY2RGB)
+        img[:] = np.multiply(img, cv2.cvtColor(overlay,cv2.COLOR_GRAY2RGB), casting="unsafe")
 
     def init_gui(self):
         # initialize the menu

@@ -1,11 +1,12 @@
 '''
-(*)~----------------------------------------------------------------------------------
- Pupil - eye tracking platform
- Copyright (C) 2012-2016  Pupil Labs
+(*)~---------------------------------------------------------------------------
+Pupil - eye tracking platform
+Copyright (C) 2012-2017  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
- License details are in the file license.txt, distributed as part of this software.
-----------------------------------------------------------------------------------~(*)
+Distributed under the terms of the GNU
+Lesser General Public License (LGPL v3.0).
+See COPYING and COPYING.LESSER for license details.
+---------------------------------------------------------------------------~(*)
 '''
 
 import os, sys, platform
@@ -17,10 +18,10 @@ import os, sys, platform
 app = 'capture'
 
 if getattr(sys, 'frozen', False):
-    if sys.executable.endswith('pupil_service'):
+    if 'pupil_service' in sys.executable:
         app = 'service'
     # Specifiy user dir.
-    user_dir = os.path.expanduser(os.path.join('~','pupil_%s_settings'%app))
+    user_dir = os.path.expanduser(os.path.join('~', 'pupil_{}_settings'.format(app)))
     version_file = os.path.join(sys._MEIPASS,'_version_string_')
 else:
     if 'service' in sys.argv:
@@ -28,19 +29,25 @@ else:
     pupil_base_dir = os.path.abspath(__file__).rsplit('pupil_src', 1)[0]
     sys.path.append(os.path.join(pupil_base_dir, 'pupil_src', 'shared_modules'))
     # Specifiy user dir.
-    user_dir = os.path.join(pupil_base_dir,'%s_settings'%app)
+    user_dir = os.path.join(pupil_base_dir,'{}_settings'.format(app))
     version_file = None
 
 # create folder for user settings, tmp data
 if not os.path.isdir(user_dir):
     os.mkdir(user_dir)
 
+# create folder for user plugins
+plugin_dir = os.path.join(user_dir,'plugins')
+if not os.path.isdir(plugin_dir):
+    os.mkdir(plugin_dir)
+
 #app version
 from version_utils import get_version
 app_version = get_version(version_file)
 
 #threading and processing
-from multiprocessing import Process, Queue, Value,active_children, freeze_support
+from multiprocessing import Process,Queue, Value,active_children,set_start_method
+from multiprocessing.spawn import freeze_support
 from threading import Thread
 from ctypes import c_double,c_bool
 
@@ -64,19 +71,6 @@ else:
     from service import service
     from eye import eye
 
-
-# To assign camera by name: put string(s) in list
-world_src = ["Pupil Cam1 ID2","Logitech Camera","(046d:081d)","C510","B525", "C525","C615","C920","C930e"]
-eye0_src = ["Pupil Cam1 ID0","HD-6000","Integrated Camera","HD USB Camera","USB 2.0 Camera"]
-eye1_src = ["Pupil Cam1 ID1","HD-6000","Integrated Camera"]
-
-# to use a pre-recorded video.
-# Use a string to specify the path to your video file as demonstrated below
-# world_src = "/Users/mkassner/Downloads/000/world.mkv"
-# eye0_src = '/Users/mkassner/Downloads/eye0.mkv'
-# eye1_src =  '/Users/mkassner/Downloads/eye.avi'
-
-video_sources = {'world':world_src,'eye0':eye0_src,'eye1':eye1_src}
 
 
 glint_queue = Queue()
@@ -118,11 +112,11 @@ def launcher():
                 n['_notify_time_'] = time()+n['delay']
                 waiting_notifications[n['subject']] = n
             #When a notifications time has come, pop from dict and send it as notification
-            for n in waiting_notifications.values():
+            for s,n in list(waiting_notifications.items()):
                 if n['_notify_time_'] < time():
                     del n['_notify_time_']
                     del n['delay']
-                    del waiting_notifications[n['subject']]
+                    del waiting_notifications[s]
                     pub.notify(n)
 
 
@@ -168,15 +162,15 @@ def launcher():
     # Using them in the main thread is not allowed.
     xsub_socket = zmq_ctx.socket(zmq.XSUB)
     xsub_socket.bind(ipc_pub_url)
-    ipc_pub_url = xsub_socket.last_endpoint.replace("0.0.0.0","127.0.0.1")
+    ipc_pub_url = xsub_socket.last_endpoint.decode('utf8').replace("0.0.0.0","127.0.0.1")
 
     xpub_socket = zmq_ctx.socket(zmq.XPUB)
     xpub_socket.bind(ipc_sub_url)
-    ipc_sub_url = xpub_socket.last_endpoint.replace("0.0.0.0","127.0.0.1")
+    ipc_sub_url = xpub_socket.last_endpoint.decode('utf8').replace("0.0.0.0","127.0.0.1")
 
     pull_socket = zmq_ctx.socket(zmq.PULL)
     pull_socket.bind(ipc_push_url)
-    ipc_push_url = pull_socket.last_endpoint.replace("0.0.0.0","127.0.0.1")
+    ipc_push_url = pull_socket.last_endpoint.decode('utf8').replace("0.0.0.0","127.0.0.1")
 
 
     # Starting communication threads:
@@ -198,7 +192,7 @@ def launcher():
     delay_thread.start()
 
     del xsub_socket,xpub_socket,pull_socket
-
+    sleep(0.2)
 
     topics = (  'notify.eye_process.',
                 'notify.launcher_process.',
@@ -215,8 +209,8 @@ def launcher():
                             ipc_sub_url,
                             ipc_push_url,
                             user_dir,
-                            app_version,
-                            None)).start()
+                            app_version
+                            )).start()
     else:
         Process(target=world,
                       name= 'world',
@@ -227,7 +221,9 @@ def launcher():
                             ipc_push_url,
                             user_dir,
                             app_version,
-                            video_sources['world'] , glint_queue, glint_vector_queue)).start()
+                            glint_queue,
+                            glint_vector_queue,
+                            )).start()
 
     with Prevent_Idle_Sleep():
         while True:
@@ -236,17 +232,16 @@ def launcher():
             if "notify.eye_process.should_start" in topic:
                 eye_id = n['eye_id']
                 if not eyes_are_alive[eye_id].value:
-                    Process(target=eye,
-                                name='eye%s'%eye_id,
-                                args=(timebase,
-                                    eyes_are_alive[eye_id],
-                                    ipc_pub_url,
-                                    ipc_sub_url,
-                                    ipc_push_url,
-                                    user_dir,
-                                    app_version,
-                                    eye_id,
-                                    video_sources['eye%s'%eye_id] , glint_queue, glint_vector_queue)).start()
+                    Process(target=eye, name='eye{}'.format(eye_id), args=(
+                            timebase,
+                            eyes_are_alive[eye_id],
+                            ipc_pub_url,
+                            ipc_sub_url,
+                            ipc_push_url,
+                            user_dir,
+                            app_version,
+                            eye_id, glint_queue, glint_vector_queue
+                            )).start()
             elif "notify.launcher_process.should_stop" in topic:
                 break
             elif "notify.meta.should_doc" in topic:
@@ -260,4 +255,6 @@ def launcher():
 
 if __name__ == '__main__':
     freeze_support()
+    if platform.system() == 'Darwin':
+        set_start_method('spawn')
     launcher()

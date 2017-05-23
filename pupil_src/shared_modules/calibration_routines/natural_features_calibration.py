@@ -1,25 +1,26 @@
 '''
-(*)~----------------------------------------------------------------------------------
- Pupil - eye tracking platform
- Copyright (C) 2012-2016  Pupil Labs
+(*)~---------------------------------------------------------------------------
+Pupil - eye tracking platform
+Copyright (C) 2012-2017  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
- License details are in the file license.txt, distributed as part of this software.
-----------------------------------------------------------------------------------~(*)
+Distributed under the terms of the GNU
+Lesser General Public License (LGPL v3.0).
+See COPYING and COPYING.LESSER for license details.
+---------------------------------------------------------------------------~(*)
 '''
 
 import os
 import cv2
 import numpy as np
 from methods import normalize, makeCalibDir
-from finish_calibration import finish_calibration
+from . finish_calibration import finish_calibration
 from pyglui.cygl.utils import draw_points_norm,RGBA
 from glfw import GLFW_PRESS
 import audio
 
 
 from pyglui import ui
-from calibration_plugin_base import Calibration_Plugin
+from . calibration_plugin_base import Calibration_Plugin
 
 #logging
 import logging
@@ -30,7 +31,7 @@ class Natural_Features_Calibration(Calibration_Plugin):
         Features are selected by a user by clicking on
     """
     def __init__(self, g_pool):
-        super(Natural_Features_Calibration, self).__init__(g_pool)
+        super().__init__(g_pool)
         self.first_img = None
         self.point = None
         self.count = 0
@@ -50,7 +51,7 @@ class Natural_Features_Calibration(Calibration_Plugin):
     def init_gui(self):
         self.info = ui.Info_Text("Calibrate gaze parameters using features in your environment. Ask the subject to look at objects in the scene and click on them in the world window.")
         self.g_pool.calibration_menu.append(self.info)
-        self.button = ui.Thumb('active',self,setter=self.toggle,label='Calibrate',hotkey='c')
+        self.button = ui.Thumb('active',self,label='C',setter=self.toggle,hotkey='c')
         self.button.on_color[:] = (.3,.2,1.,.9)
         self.g_pool.quickbar.insert(0,self.button)
 
@@ -113,7 +114,7 @@ class Natural_Features_Calibration(Calibration_Plugin):
                     self.detected = True
                     self.point = nextPts
                     self.first_img = gray.copy()
-                    nextPts = nextPts[0]
+                    nextPts = nextPts[0].tolist() #we prefer python types.
                     self.pos = normalize(nextPts,(gray.shape[1],gray.shape[0]),flip_y=True)
                     self.count -=1
 

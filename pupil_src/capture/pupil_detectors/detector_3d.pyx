@@ -1,12 +1,13 @@
 
 '''
-(*)~----------------------------------------------------------------------------------
- Pupil - eye tracking platform
- Copyright (C) 2012-2016  Pupil Labs
+(*)~---------------------------------------------------------------------------
+Pupil - eye tracking platform
+Copyright (C) 2012-2017  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
- License details are in the file license.txt, distributed as part of this software.
-----------------------------------------------------------------------------------~(*)
+Distributed under the terms of the GNU
+Lesser General Public License (LGPL v3.0).
+See COPYING and COPYING.LESSER for license details.
+---------------------------------------------------------------------------~(*)
 '''
 
 # cython: profile=False
@@ -63,25 +64,26 @@ cdef class Detector_3D:
 
         if not self.detectProperties2D:
             self.detectProperties2D["coarse_detection"] = True
-            self.detectProperties2D["coarse_filter_min"] = 150
-            self.detectProperties2D["coarse_filter_max"] = 400
-            self.detectProperties2D["intensity_range"] = 17
-            self.detectProperties2D["blur_size"] = 3
-            self.detectProperties2D["canny_treshold"] = 200
-            self.detectProperties2D["canny_ration"] = 3
+            self.detectProperties2D["coarse_filter_min"] = 128
+            self.detectProperties2D["coarse_filter_max"] = 280
+            self.detectProperties2D["intensity_range"] = 23
+            self.detectProperties2D["blur_size"] = 5
+            self.detectProperties2D["canny_treshold"] = 160
+            self.detectProperties2D["canny_ration"] = 2
             self.detectProperties2D["canny_aperture"] = 5
-            self.detectProperties2D["pupil_size_max"] = 150
+            self.detectProperties2D["pupil_size_max"] = 240
             self.detectProperties2D["pupil_size_min"] = 40
-            self.detectProperties2D["strong_perimeter_ratio_range_min"] = 0.8
+            self.detectProperties2D["strong_perimeter_ratio_range_min"] = 0.6
             self.detectProperties2D["strong_perimeter_ratio_range_max"] = 1.1
-            self.detectProperties2D["strong_area_ratio_range_min"] = 0.6
+            self.detectProperties2D["strong_area_ratio_range_min"] = 0.8
             self.detectProperties2D["strong_area_ratio_range_max"] = 1.1
             self.detectProperties2D["contour_size_min"] = 5
-            self.detectProperties2D["ellipse_roundness_ratio"] = 0.1
-            self.detectProperties2D["initial_ellipse_fit_treshhold"] = 1.8
-            self.detectProperties2D["final_perimeter_ratio_range_min"] = 0.6
-            self.detectProperties2D["final_perimeter_ratio_range_max"] = 1.2
-            self.detectProperties2D["ellipse_true_support_min_dist"] = 2.5
+            self.detectProperties2D["ellipse_roundness_ratio"] = 0.09
+            self.detectProperties2D["initial_ellipse_fit_treshhold"] = 4.3
+            self.detectProperties2D["final_perimeter_ratio_range_min"] = 0.5
+            self.detectProperties2D["final_perimeter_ratio_range_max"] = 1.0
+            self.detectProperties2D["ellipse_true_support_min_dist"] = 3.0
+
 
         if not self.detectProperties3D:
             self.detectProperties3D["model_sensitivity"] = 0.997
@@ -190,6 +192,7 @@ cdef class Detector_3D:
 
     def init_gui(self,sidebar):
         self.menu2D = ui.Growing_Menu('Pupil Detector 2D')
+        self.menu2D.collapsed = True
         info = ui.Info_Text("Switch to the algorithm display mode to see a visualization of pupil detection parameters overlaid on the eye video. "\
                                 +"Adjust the pupil intensity range so that the pupil is fully overlaid with blue. "\
                                 +"Adjust the pupil min and pupil max ranges (red circles) so that the detected pupil size (green circle) is within the bounds.")
@@ -198,19 +201,27 @@ cdef class Detector_3D:
         self.menu2D.append(ui.Slider('intensity_range',self.detectProperties2D,label='Pupil intensity range',min=0,max=60,step=1))
         self.menu2D.append(ui.Slider('pupil_size_min',self.detectProperties2D,label='Pupil min',min=1,max=250,step=1))
         self.menu2D.append(ui.Slider('pupil_size_max',self.detectProperties2D,label='Pupil max',min=50,max=400,step=1))
+        advanced_controls_menu = ui.Growing_Menu('Advanced Controls')
+        advanced_controls_menu.append(ui.Slider('ellipse_roundness_ratio',self.detectProperties2D,label='Ellipse roundness ratio',min=0.1,max=1.0,step=0.01))
+        advanced_controls_menu.append(ui.Slider('canny_ration',self.detectProperties2D,label='Canny ration',min=1,max=15,step=0.01))
+        advanced_controls_menu.append(ui.Slider('canny_treshold',self.detectProperties2D,label='Canny treshold',min=100,max=300,step=1))
+        advanced_controls_menu.append(ui.Slider('coarse_filter_min',self.detectProperties2D,label='Coarse filter min',min=100,max=200,step=1))
+        advanced_controls_menu.append(ui.Slider('coarse_filter_max',self.detectProperties2D,label='Coarse filter max',min=250,max=350,step=1))
+        self.menu2D.append(advanced_controls_menu)
         #self.menu2D.append(ui.Slider('ellipse_roundness_ratio',self.detectProperties2D,min=0.01,max=1.0,step=0.01))
         #self.menu2D.append(ui.Slider('initial_ellipse_fit_treshhold',self.detectProperties2D,min=0.01,max=6.0,step=0.01))
         #self.menu2D.append(ui.Slider('canny_treshold',self.detectProperties2D,min=1,max=1000,step=1))
         #self.menu2D.append(ui.Slider('canny_ration',self.detectProperties2D,min=1,max=4,step=1))
         self.menu3D = ui.Growing_Menu('Pupil Detector 3D')
+        self.menu3D.collapsed = True
         info_3d = ui.Info_Text("Open the debug window to see a visualization of the 3D pupil detection." )
         self.menu3D.append(info_3d)
         self.menu3D.append(ui.Button('Reset 3D model', self.reset_3D_Model ))
         self.menu3D.append(ui.Button('Open debug window',self.toggle_window))
         self.menu3D.append(ui.Slider('model_sensitivity',self.detectProperties3D,label='Model sensitivity',min=0.990,max=1.0,step=0.0001))
         self.menu3D[-1].display_format = '%0.4f'
-        # self.menu3D.append(ui.Slider('pupil_radius_min',self.detectProperties3D,label='Pupil min radius', min=1.0,max= 8.0,step=0.1))
-        # self.menu3D.append(ui.Slider('pupil_radius_max',self.detectProperties3D,label='Pupil max radius', min=1.0,max=8.0,step=0.1))
+        #self.menu3D.append(ui.Slider('pupil_radius_min',self.detectProperties3D,label='Pupil min radius', min=1.0,max= 8.0,step=0.1))
+        #self.menu3D.append(ui.Slider('pupil_radius_max',self.detectProperties3D,label='Pupil max radius', min=1.0,max=8.0,step=0.1))
         # self.menu3D.append(ui.Slider('max_fit_residual',self.detectProperties3D,label='3D fit max residual', min=0.00,max=0.1,step=0.0001))
         # self.menu3D.append(ui.Slider('max_circle_variance',self.detectProperties3D,label='3D fit max circle variance', min=0.01,max=2.0,step=0.001))
         # self.menu3D.append(ui.Slider('combine_evaluation_max',self.detectProperties3D,label='3D fit max combinations eval', min=500,max=50000,step=5000))
@@ -219,7 +230,7 @@ cdef class Detector_3D:
         sidebar.append(self.menu3D)
         #advanced_controls_menu = ui.Growing_Menu('Advanced Controls')
         #advanced_controls_menu.append(ui.Slider('contour_size_min',self.detectProperties2D,label='Contour min length',min=1,max=200,step=1))
-        #sidebar.append(advanced_controls_menu)
+        #self.menu3D.append(advanced_controls_menu)
 
     def deinit_gui(self):
         self.gPool.sidebar.remove(self.menu2D)

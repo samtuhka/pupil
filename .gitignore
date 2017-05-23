@@ -41,3 +41,4 @@ CircleGoodnessTest.cpp
 SphereCircleTest.cpp
 *.mp4
 *.mkv
+*.egg-info

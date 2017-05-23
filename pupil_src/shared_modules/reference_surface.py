@@ -1,15 +1,17 @@
 '''
-(*)~----------------------------------------------------------------------------------
- Pupil - eye tracking platform
- Copyright (C) 2012-2016  Pupil Labs
+(*)~---------------------------------------------------------------------------
+Pupil - eye tracking platform
+Copyright (C) 2012-2017  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
- License details are in the file license.txt, distributed as part of this software.
-----------------------------------------------------------------------------------~(*)
+Distributed under the terms of the GNU
+Lesser General Public License (LGPL v3.0).
+See COPYING and COPYING.LESSER for license details.
+---------------------------------------------------------------------------~(*)
 '''
 
 import numpy as np
 import cv2
+from platform import system
 from gl_utils import adjust_gl_view,clear_gl_screen,basic_gl_setup,cvmat_to_glmat,make_coord_system_norm_based
 from gl_utils.trackball import Trackball
 from glfw import *
@@ -76,6 +78,7 @@ class Reference_Surface(object):
         self.m_to_screen = None
         self.m_from_screen = None
         self.camera_pose_3d = None
+        self.use_distortion = 0
 
         self.uid = str(time())
         self.real_world_size = {'x':1.,'y':1.}
@@ -94,15 +97,25 @@ class Reference_Surface(object):
         self.glfont.set_color_float((0.2,0.5,0.9,1.0))
 
 
+        self.old_corners_robust = None
         if saved_definition is not None:
             self.load_from_dict(saved_definition)
+
+        # UI Platform tweaks
+        if system() == 'Linux':
+            self.window_position_default = (0, 0)
+        elif system() == 'Windows':
+            self.window_position_default = (8, 31)
+        else:
+            self.window_position_default = (0, 0)
+
 
 
     def save_to_dict(self):
         """
         save all markers and name of this surface to a dict.
         """
-        markers = dict([(m_id,m.uv_coords) for m_id,m in self.markers.iteritems()])
+        markers = dict([(m_id,m.uv_coords.tolist()) for m_id,m in self.markers.items()])
         return {'name':self.name,'uid':self.uid,'markers':markers,'real_world_size':self.real_world_size}
 
 
@@ -115,15 +128,15 @@ class Reference_Surface(object):
         self.real_world_size = d.get('real_world_size',{'x':1.,'y':1.})
 
         marker_dict = d['markers']
-        for m_id,uv_coords in marker_dict.iteritems():
+        for m_id,uv_coords in marker_dict.items():
             self.markers[m_id] = Support_Marker(m_id)
-            self.markers[m_id].load_uv_coords(uv_coords)
+            self.markers[m_id].load_uv_coords(np.asarray(uv_coords))
 
         #flag this surface as fully defined
         self.defined = True
         self.build_up_status = self.required_build_up
 
-    def build_correspondance(self, visible_markers,camera_calibration,min_marker_perimeter):
+    def build_correspondance(self, visible_markers,camera_calibration,min_marker_perimeter,min_id_confidence):
         """
         - use all visible markers
         - fit a convex quadrangle around it
@@ -131,14 +144,14 @@ class Reference_Surface(object):
         - map all markers into surface space
         - build up list of found markers and their uv coords
         """
-
-        all_verts = [m['verts'] for m in visible_markers if m['perimeter']>=min_marker_perimeter]
+        usable_markers = [m for m in visible_markers if m['perimeter']>=min_marker_perimeter]
+        all_verts = [m['verts'] for m in usable_markers]
         if not all_verts:
             return
-        all_verts = np.array(all_verts)
+        all_verts = np.array(all_verts,dtype=np.float32)
         all_verts.shape = (-1,1,2) # [vert,vert,vert,vert,vert...] with vert = [[r,c]]
         # all_verts_undistorted_normalized centered in img center flipped in y and range [-1,1]
-        all_verts_undistorted_normalized = cv2.undistortPoints(all_verts, camera_calibration['camera_matrix'],camera_calibration['dist_coefs'])
+        all_verts_undistorted_normalized = cv2.undistortPoints(all_verts, np.asarray(camera_calibration['camera_matrix']),np.asarray(camera_calibration['dist_coefs'])*self.use_distortion)
         hull = cv2.convexHull(all_verts_undistorted_normalized,clockwise=False)
 
         #simplify until we have excatly 4 verts
@@ -166,12 +179,12 @@ class Reference_Surface(object):
         #based on these 4 verts we calculate the transformations into a 0,0 1,1 square space
         m_from_undistored_norm_space = m_verts_from_screen(hull)
         self.detected = True
-        # map the markers vertices in to the surface space (one can think of these as texture coordinates u,v)
+        # map the markers vertices into the surface space (one can think of these as texture coordinates u,v)
         marker_uv_coords =  cv2.perspectiveTransform(all_verts_undistorted_normalized,m_from_undistored_norm_space)
         marker_uv_coords.shape = (-1,4,1,2) #[marker,marker...] marker = [ [[r,c]],[[r,c]] ]
 
         # build up a dict of discovered markers. Each with a history of uv coordinates
-        for m,uv in zip (visible_markers,marker_uv_coords):
+        for m,uv in zip(usable_markers, marker_uv_coords):
             try:
                 self.markers[m['id']].add_uv_coords(uv)
             except KeyError:
@@ -191,7 +204,7 @@ class Reference_Surface(object):
         - this mean value will be used from now on to estable surface transform
         """
         persistent_markers = {}
-        for k,m in self.markers.iteritems():
+        for k,m in self.markers.items():
             if len(m.collected_uv_coords)>self.required_build_up*.5:
                 persistent_markers[k] = m
         self.markers = persistent_markers
@@ -199,32 +212,43 @@ class Reference_Surface(object):
             m.compute_robust_mean()
 
         self.defined = True
+        if hasattr(self,'on_finish_define'):
+            self.on_finish_define()
+            del self.on_finish_define
 
 
-    def locate(self, visible_markers,camera_calibration,min_marker_perimeter, locate_3d=False,):
+    def locate(self, visible_markers,camera_calibration,min_marker_perimeter,min_id_confidence, locate_3d=False,):
         """
         - find overlapping set of surface markers and visible_markers
         - compute homography (and inverse) based on this subset
         """
 
         if not self.defined:
-            self.build_correspondance(visible_markers,camera_calibration,min_marker_perimeter)
+            self.build_correspondance(visible_markers,camera_calibration,min_marker_perimeter,min_id_confidence)
 
-        res = self._get_location(visible_markers,camera_calibration,min_marker_perimeter,locate_3d)
+        res = self._get_location(visible_markers,camera_calibration,min_marker_perimeter,min_id_confidence,locate_3d)
         self.detected = res['detected']
         self.detected_markers = res['detected_markers']
         self.m_to_screen = res['m_to_screen']
         self.m_from_screen = res['m_from_screen']
         self.camera_pose_3d = res['camera_pose_3d']
 
-    def _get_location(self,visible_markers,camera_calibration,min_marker_perimeter,locate_3d=False):
+    def _get_location(self,visible_markers,camera_calibration,min_marker_perimeter,min_id_confidence, locate_3d=False):
 
-        marker_by_id = dict([(m['id'],m) for m in visible_markers if m['perimeter']>=min_marker_perimeter])
+        filtered_markers = [m for m in visible_markers if m['perimeter']>=min_marker_perimeter and m['id_confidence']>min_id_confidence]
+        marker_by_id ={}
+        #if an id shows twice we use the bigger marker (usually this is a screen camera echo artifact.)
+        for m in filtered_markers:
+            if m["id"] in marker_by_id and m["perimeter"] < marker_by_id[m['id']]['perimeter']:
+                pass
+            else:
+                marker_by_id[m["id"]] = m
+
         visible_ids = set(marker_by_id.keys())
         requested_ids = set(self.markers.keys())
         overlap = visible_ids & requested_ids
-        overlap_perimeter = sum(marker_by_id[i]['perimeter'] for i in overlap)
-        if overlap and overlap_perimeter>=min_marker_perimeter*min(2,len(requested_ids)):
+        # need at least two markers per surface when the surface is more that 1 marker.
+        if overlap and len(overlap) >= min(2,len(requested_ids)):
             detected = True
             xy = np.array( [marker_by_id[i]['verts'] for i in overlap] )
             uv = np.array( [self.markers[i].uv_coords for i in overlap] )
@@ -233,14 +257,16 @@ class Reference_Surface(object):
             # our camera lens creates distortions we want to get a good 2d estimate despite that so we:
             # compute the homography transform from marker into the undistored normalized image space
             # (the line below is the same as what you find in methods.undistort_unproject_pts, except that we ommit the z corrd as it is always one.)
-            xy_undistorted_normalized = cv2.undistortPoints(xy.reshape(-1,1,2), camera_calibration['camera_matrix'],camera_calibration['dist_coefs'])
-            m_to_undistored_norm_space,mask = cv2.findHomography(uv,xy_undistorted_normalized)
+            xy_undistorted_normalized = cv2.undistortPoints(xy.reshape(-1,1,2), np.asarray(camera_calibration['camera_matrix']),np.asarray(camera_calibration['dist_coefs'])*self.use_distortion)
+            m_to_undistored_norm_space,mask = cv2.findHomography(uv,xy_undistorted_normalized, method=cv2.RANSAC,ransacReprojThreshold=0.1)
+            if not mask.all():
+                detected = False
             m_from_undistored_norm_space,mask = cv2.findHomography(xy_undistorted_normalized,uv)
             # project the corners of the surface to undistored space
             corners_undistored_space = cv2.perspectiveTransform(marker_corners_norm.reshape(-1,1,2),m_to_undistored_norm_space)
             # project and distort these points  and normalize them
-            corners_redistorted, corners_redistorted_jacobian = cv2.projectPoints(cv2.convertPointsToHomogeneous(corners_undistored_space), np.array([0,0,0], dtype=np.float32) , np.array([0,0,0], dtype=np.float32), camera_calibration['camera_matrix'], camera_calibration['dist_coefs'])
-            corners_nulldistorted, corners_nulldistorted_jacobian = cv2.projectPoints(cv2.convertPointsToHomogeneous(corners_undistored_space), np.array([0,0,0], dtype=np.float32) , np.array([0,0,0], dtype=np.float32), camera_calibration['camera_matrix'], camera_calibration['dist_coefs']*0)
+            corners_redistorted, corners_redistorted_jacobian = cv2.projectPoints(cv2.convertPointsToHomogeneous(corners_undistored_space), np.array([0,0,0], dtype=np.float32) , np.array([0,0,0], dtype=np.float32), np.asarray(camera_calibration['camera_matrix']), np.asarray(camera_calibration['dist_coefs'])*self.use_distortion)
+            corners_nulldistorted, corners_nulldistorted_jacobian = cv2.projectPoints(cv2.convertPointsToHomogeneous(corners_undistored_space), np.array([0,0,0], dtype=np.float32) , np.array([0,0,0], dtype=np.float32), np.asarray(camera_calibration['camera_matrix']), np.asarray(camera_calibration['dist_coefs'])*0)
 
             #normalize to pupil norm space
             corners_redistorted.shape = -1,2
@@ -270,7 +296,18 @@ class Reference_Surface(object):
                 else:
                     corners_robust.append(nulldist)
 
+
             corners_robust = np.array(corners_robust)
+
+            if self.old_corners_robust is not None and np.mean(np.abs(corners_robust-self.old_corners_robust)) < 0.02:
+                smooth_corners_robust  = self.old_corners_robust
+                smooth_corners_robust += .5*(corners_robust-self.old_corners_robust )
+
+                corners_robust = smooth_corners_robust
+                self.old_corners_robust  = smooth_corners_robust
+            else:
+                self.old_corners_robust = corners_robust
+
             #compute a perspective thransform from from the marker norm space to the apparent image.
             # The surface corners will be at the right points
             # However the space between the corners may be distored due to distortions of the lens,
@@ -279,9 +316,9 @@ class Reference_Surface(object):
 
             camera_pose_3d = None
             if locate_3d:
-                dist_coef, = camera_calibration['dist_coefs']
+                dist_coef, = np.asarray(camera_calibration['dist_coefs'])
                 img_size = camera_calibration['resolution']
-                K = camera_calibration['camera_matrix']
+                K = np.asarray(camera_calibration['camera_matrix'])
 
                 # 3d marker support pose estimation:
                 # scale normalized object points to world space units (think m,cm,mm)
@@ -292,7 +329,7 @@ class Reference_Surface(object):
                 uv3d[:,:-1] = uv
                 xy.shape = -1,1,2
                 # compute pose of object relative to camera center
-                is3dPoseAvailable, rot3d_cam_to_object, translate3d_cam_to_object = cv2.solvePnP(uv3d, xy, K, dist_coef,flags=cv2.CV_EPNP)
+                is3dPoseAvailable, rot3d_cam_to_object, translate3d_cam_to_object = cv2.solvePnP(uv3d, xy, K, dist_coef,flags=cv2.SOLVEPNP_EPNP)
 
                 if is3dPoseAvailable:
 
@@ -341,6 +378,13 @@ class Reference_Surface(object):
                     # combine all tranformations into transformation matrix that decribes the move from object origin and orientation to camera origin and orientation
                     tranform3d_object_to_cam =  np.matrix(flip_z_axix_hm) * np.matrix(rot3d_object_to_cam_hm) * np.matrix(translate3d_object_to_cam_hm)
                     camera_pose_3d = tranform3d_object_to_cam
+            if detected == False:
+                camera_pose_3d = None
+                m_from_screen = None
+                m_to_screen = None
+                m_from_undistored_norm_space = None
+                m_to_undistored_norm_space = None
+
         else:
             detected = False
             camera_pose_3d = None
@@ -376,7 +420,7 @@ class Reference_Surface(object):
         mapped_pos = cv2.perspectiveTransform(pos , m_from_screen )
         mapped_pos.shape = (2)
         on_srf = bool((0 <= mapped_pos[0] <= 1) and (0 <= mapped_pos[1] <= 1))
-        return {'norm_pos':(mapped_pos[0],mapped_pos[1]),'on_srf':on_srf,'base_data':d }
+        return {'topic':d['topic']+"_on_surface",'norm_pos':(mapped_pos[0],mapped_pos[1]),'confidence':d['confidence'],'on_srf':on_srf,'base_data':d }
 
     def map_data_to_surface(self,data,m_from_screen):
         return [self.map_datum_to_surface(d,m_from_screen) for d in data]
@@ -397,19 +441,19 @@ class Reference_Surface(object):
             m.uv_coords = cv2.perspectiveTransform(m.uv_coords,transform)
 
 
-    def add_marker(self,marker,visible_markers,camera_calibration,min_marker_perimeter):
+    def add_marker(self,marker,visible_markers,camera_calibration,min_marker_perimeter,min_id_confidence):
         '''
         add marker to surface.
         '''
-        res = self._get_location(visible_markers,camera_calibration,min_marker_perimeter,locate_3d=False)
+        res = self._get_location(visible_markers,camera_calibration,min_marker_perimeter,min_id_confidence,locate_3d=False)
         if res['detected']:
             support_marker = Support_Marker(marker['id'])
             marker_verts = np.array(marker['verts'])
             marker_verts.shape = (-1,1,2)
-            marker_verts_undistorted_normalized = cv2.undistortPoints(marker_verts, camera_calibration['camera_matrix'],camera_calibration['dist_coefs'])
+            marker_verts_undistorted_normalized = cv2.undistortPoints(marker_verts, np.asarray(camera_calibration['camera_matrix']),np.asarray(camera_calibration['dist_coefs'])*self.use_distortion)
             marker_uv_coords =  cv2.perspectiveTransform(marker_verts_undistorted_normalized,res['m_from_undistored_norm_space'])
             support_marker.load_uv_coords(marker_uv_coords)
-        self.markers[marker['id']] = support_marker
+            self.markers[marker['id']] = support_marker
 
 
     def remove_marker(self,marker):
@@ -418,9 +462,8 @@ class Reference_Surface(object):
             return
         self.markers.pop(marker['id'])
 
-
     def marker_status(self):
-        return "%s   %s/%s" %(self.name,self.detected_markers,len(self.markers))
+        return "{}   {}/{}".format(self.name, self.detected_markers, len(self.markers))
 
     def get_mode_toggle(self,pos,img_shape):
         if self.detected and self.defined:
@@ -463,24 +506,39 @@ class Reference_Surface(object):
             text_anchor = text_anchor[0],text_anchor[1]-75
             surface_edit_anchor = text_anchor[0],text_anchor[1]+25
             marker_edit_anchor = text_anchor[0],text_anchor[1]+50
-            if marker_mode:
-                draw_points([marker_edit_anchor],color=RGBA(0,.8,.7))
+            if self.defined:
+                if marker_mode:
+                    draw_points([marker_edit_anchor],color=RGBA(0,.8,.7))
+                else:
+                    draw_points([marker_edit_anchor])
+                if surface_mode:
+                    draw_points([surface_edit_anchor],color=RGBA(0,.8,.7))
+                else:
+                    draw_points([surface_edit_anchor])
+
+                self.glfont.set_blur(3.9)
+                self.glfont.set_color_float((0,0,0,.8))
+                self.glfont.draw_text(text_anchor[0]+15,text_anchor[1]+6,self.marker_status())
+                self.glfont.draw_text(surface_edit_anchor[0]+15,surface_edit_anchor[1]+6,'edit surface')
+                self.glfont.draw_text(marker_edit_anchor[0]+15,marker_edit_anchor[1]+6,'add/remove markers')
+                self.glfont.set_blur(0.0)
+                self.glfont.set_color_float((0.1,8.,8.,.9))
+                self.glfont.draw_text(text_anchor[0]+15,text_anchor[1]+6,self.marker_status())
+                self.glfont.draw_text(surface_edit_anchor[0]+15,surface_edit_anchor[1]+6,'edit surface')
+                self.glfont.draw_text(marker_edit_anchor[0]+15,marker_edit_anchor[1]+6,'add/remove markers')
             else:
-                draw_points([marker_edit_anchor])
-            if surface_mode:
-                draw_points([surface_edit_anchor],color=RGBA(0,.8,.7))
-            else:
-                draw_points([surface_edit_anchor])
-            self.glfont.set_blur(3.9)
-            self.glfont.set_color_float((0,0,0,.8))
-            self.glfont.draw_text(text_anchor[0]+15,text_anchor[1]+6,self.marker_status())
-            self.glfont.draw_text(surface_edit_anchor[0]+15,surface_edit_anchor[1]+6,'edit surface')
-            self.glfont.draw_text(marker_edit_anchor[0]+15,marker_edit_anchor[1]+6,'add/remove markers')
-            self.glfont.set_blur(0.0)
-            self.glfont.set_color_float((0.1,8.,8.,.9))
-            self.glfont.draw_text(text_anchor[0]+15,text_anchor[1]+6,self.marker_status())
-            self.glfont.draw_text(surface_edit_anchor[0]+15,surface_edit_anchor[1]+6,'edit surface')
-            self.glfont.draw_text(marker_edit_anchor[0]+15,marker_edit_anchor[1]+6,'add/remove markers')
+                progress = (self.build_up_status/float(self.required_build_up))*100
+                progress_text = '%.0f%%'%progress
+                self.glfont.set_blur(3.9)
+                self.glfont.set_color_float((0,0,0,.8))
+                self.glfont.draw_text(text_anchor[0]+15,text_anchor[1]+6,self.marker_status())
+                self.glfont.draw_text(surface_edit_anchor[0]+15,surface_edit_anchor[1]+6,'Learning affiliated markers...')
+                self.glfont.draw_text(marker_edit_anchor[0]+15,marker_edit_anchor[1]+6,progress_text)
+                self.glfont.set_blur(0.0)
+                self.glfont.set_color_float((0.1,8.,8.,.9))
+                self.glfont.draw_text(text_anchor[0]+15,text_anchor[1]+6,self.marker_status())
+                self.glfont.draw_text(surface_edit_anchor[0]+15,surface_edit_anchor[1]+6,'Learning affiliated markers...')
+                self.glfont.draw_text(marker_edit_anchor[0]+15,marker_edit_anchor[1]+6,progress_text)
 
     def gl_draw_corners(self):
         """
@@ -595,7 +653,7 @@ class Reference_Surface(object):
 
             self._window = glfwCreateWindow(height, width, "Reference Surface: " + self.name, monitor=monitor, share=glfwGetCurrentContext())
             if not self.fullscreen:
-                glfwSetWindowPos(self._window,200,0)
+                glfwSetWindowPos(self._window,self.window_position_default[0],self.window_position_default[1])
 
 
 
@@ -651,7 +709,7 @@ class Reference_Surface(object):
                 self.on_close()
 
     def on_close(self,window=None):
-        self.window_should_close = True
+        self.close_window()
 
 
     def on_button(self,window,button, action, mods):
@@ -701,22 +759,23 @@ class Support_Marker(object):
 
     def compute_robust_mean(self,threshhold=.1):
         """
-        right now its just the mean. Not so good...
+        treat 50% as outliers. Assume majory is right.
         """
         # a stacked list of marker uv coords. marker uv cords are 4 verts with each a uv position.
         uv = np.array(self.collected_uv_coords)
         # # the mean marker uv_coords including outliers
-        # base_line_mean = np.mean(uv,axis=0)
+        base_line_mean = np.mean(uv,axis=0)
         # # devidation is the distance of each scalar (4*2 per marker to the mean value of this scalar acros our stacked list)
-        # deviation = uv-base_line_mean
-        # # now we treat the four uv scalars as a vector in 8-d space and compute the euclidian distace to the mean
-        # distance =  np.linalg.norm(deviation,axis=(1,3))
-        # # we now have 1 distance measure per recorded apprearace of the marker
-        # uv_subset = uv[distance<threshhold]
-        # ratio = uv_subset.shape[0]/float(uv.shape[0])
-        # #todo: find a good way to get some meaningfull and accurate numbers to use
-        #right now we take the mean of the last 30 datapoints
-        uv_mean = np.mean(uv[-30:],axis=0)
+        deviation = uv-base_line_mean
+        # # now we treat the four uv scalars as a vector in 8-d space and compute the distace to the mean
+        distance =  np.linalg.norm(deviation,axis=(1,3)).reshape(-1)
+        # lets get the .5 cutof;
+        cut_off = sorted(distance)[len(distance)//2]
+        # filter the better half
+        uv_subset = uv[distance<=cut_off]
+        # claculate the mean of this subset
+        uv_mean = np.mean(uv_subset,axis=0)
+        # use it
         self.uv_coords = uv_mean
         self.robust_uv_cords = True
 
@@ -796,9 +855,9 @@ if __name__ == '__main__':
     tranform3d_to_camera_rotation = np.eye(4, dtype=np.float32)
     tranform3d_to_camera_rotation[:-1,:-1] = rotation3dMat.T
 
-    print tranform3d_to_camera_translation
-    print tranform3d_to_camera_rotation
-    print np.matrix(tranform3d_to_camera_rotation) * np.matrix(tranform3d_to_camera_translation)
+    print(tranform3d_to_camera_translation)
+    print(tranform3d_to_camera_rotation)
+    print(np.matrix(tranform3d_to_camera_rotation) * np.matrix(tranform3d_to_camera_translation))
 
 
 

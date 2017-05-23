@@ -1,39 +1,29 @@
 '''
-(*)~----------------------------------------------------------------------------------
- Pupil - eye tracking platform
- Copyright (C) 2012-2016  Pupil Labs
+(*)~---------------------------------------------------------------------------
+Pupil - eye tracking platform
+Copyright (C) 2012-2017  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
- License details are in the file license.txt, distributed as part of this software.
-----------------------------------------------------------------------------------~(*)
+Distributed under the terms of the GNU
+Lesser General Public License (LGPL v3.0).
+See COPYING and COPYING.LESSER for license details.
+---------------------------------------------------------------------------~(*)
 '''
 
 from plugin import Plugin
-import numpy as np
-import os,sys, platform
+import os
 import time
+import multiprocessing as mp
 from pyglui import ui
 import logging
 logger = logging.getLogger(__name__)
-
-from ctypes import c_bool, c_int,create_string_buffer
-
-if platform.system() == 'Darwin':
-    from billiard import Process,forking_enable,cpu_count
-    from billiard.sharedctypes import Value
-else:
-    from multiprocessing import Process,cpu_count
-    forking_enable = lambda x: x #dummy fn
-    from multiprocessing.sharedctypes import Value
-
+from ctypes import c_bool, c_int
 from exporter import export
 
-class Export_Process(Process):
+class Export_Process(mp.Process):
     """small aditions to the process class"""
     def __init__(self, target,args):
-        super(Export_Process, self).__init__(target=target,args=args)
-        self.should_terminate,self.frames_to_export,self.current_frame,_,_,_,_,_,self.out_file_path = args
-
+        super().__init__(target=target,args=args)
+        self.should_terminate,self.frames_to_export,self.current_frame,_,_,_,_,_,_,self.out_file_path,_ = args
     def status(self):
         return self.current_frame.value
     def cancel(self):
@@ -52,29 +42,31 @@ def verify_out_file_path(out_file_path,rec_dir):
             dir_name = rec_dir
         if not file_name:
             file_name = 'world_viz.mp4'
-        out_file_path = os.path.expanduser(os.path.join(dir_name,file_name))
+        out_file_path = os.path.expanduser(os.path.join(dir_name, file_name))
 
     out_file_path = avoid_overwrite(out_file_path)
     if os.path.isfile(out_file_path):
         logger.warning("Video out file already exsists. I will overwrite!")
         os.remove(out_file_path)
-    logger.debug("Saving Video to %s"%out_file_path)
+    logger.debug("Saving Video to {}".format(out_file_path))
 
     return out_file_path
+
 
 def avoid_overwrite(out_file_path):
     if os.path.isfile(out_file_path):
         # append something unique to avoid overwriting
-        out_file_path,ext = os.path.splitext(out_file_path)
+        out_file_path, ext = os.path.splitext(out_file_path)
         out_file_path += str(int(time.time())) + '.mp4'
     return out_file_path
+
 
 class Video_Export_Launcher(Plugin):
     """docstring for Video_Export_Launcher
     this plugin can export the video in a seperate process using exporter
     """
     def __init__(self, g_pool):
-        super(Video_Export_Launcher, self).__init__(g_pool)
+        super().__init__(g_pool)
         # initialize empty menu
         self.menu = None
         self.new_export = None
@@ -125,13 +117,10 @@ class Video_Export_Launcher(Plugin):
             self.add_export(notification['range'],notification['export_dir'])
 
     def add_export(self,export_range,export_dir):
-        # on MacOS we will not use os.fork, elsewhere this does nothing.
-        forking_enable(0)
-
         logger.debug("Adding new video export process.")
-        should_terminate = Value(c_bool,False)
-        frames_to_export  = Value(c_int,0)
-        current_frame = Value(c_int,0)
+        should_terminate = mp.Value(c_bool,False)
+        frames_to_export  = mp.Value(c_int,0)
+        current_frame = mp.Value(c_int,0)
 
         rec_dir = self.g_pool.rec_dir
         user_dir = self.g_pool.user_dir
@@ -144,7 +133,7 @@ class Video_Export_Launcher(Plugin):
         plugins = self.g_pool.plugins.get_initializers()
 
         out_file_path=verify_out_file_path(self.rec_name,export_dir)
-        process = Export_Process(target=export, args=(should_terminate,frames_to_export,current_frame, rec_dir,user_dir,start_frame,end_frame,plugins,out_file_path))
+        process = Export_Process(target=export, args=(should_terminate,frames_to_export,current_frame, rec_dir,user_dir,self.g_pool.min_data_confidence,start_frame,end_frame,plugins,out_file_path,self.g_pool.pupil_data))
         self.new_export = process
 
     def launch_export(self, new_export):
@@ -168,5 +157,9 @@ class Video_Export_Launcher(Plugin):
         if you have a GUI or glfw window destroy it here.
         """
         self.deinit_gui()
-
-
+        for e in self.exports:
+            e.cancel()
+            e.join(1.0)
+            if e.is_alive():
+                logger.error("Export unresponsive - terminating.")
+                e.terminate()

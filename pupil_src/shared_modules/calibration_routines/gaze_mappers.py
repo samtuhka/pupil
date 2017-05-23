@@ -1,18 +1,17 @@
 '''
-(*)~----------------------------------------------------------------------------------
- Pupil - eye tracking platform
- Copyright (C) 2012-2016  Pupil Labs
+(*)~---------------------------------------------------------------------------
+Pupil - eye tracking platform
+Copyright (C) 2012-2017  Pupil Labs
 
- Distributed under the terms of the GNU Lesser General Public License (LGPL v3.0).
- License details are in the file license.txt, distributed as part of this software.
-----------------------------------------------------------------------------------~(*)
+Distributed under the terms of the GNU
+Lesser General Public License (LGPL v3.0).
+See COPYING and COPYING.LESSER for license details.
+---------------------------------------------------------------------------~(*)
 '''
 
-from calibrate import make_map_function, make_map_function_two_glints
 from plugin import Plugin
 import cv2
-from calibrate import make_map_function
-import calibrate
+from . import calibrate
 from methods import project_distort_pts , normalize, spherical_to_cart
 from copy import deepcopy
 import numpy as np
@@ -22,14 +21,21 @@ import zmq_tools
 import threading
 from multiprocessing import Process as Thread
 
-from visualizer_calibration import *
+from . visualizer_calibration import Calibration_Visualizer
 
+def _clamp_norm_point(pos):
+    '''realistic numbers for norm pos should be in this range.
+        Grossly bigger or smaller numbers are results bad exrapolation
+        and can cause overflow erorr when denormalized and cast as int32.
+    '''
+    return min(100.,max(-100.,pos[0])),min(100.,max(-100.,pos[1]))
 
 class Gaze_Mapping_Plugin(Plugin):
     '''base class for all gaze mapping routines'''
     uniqueness = 'by_base_class'
+    order = .1
     def __init__(self,g_pool):
-        super(Gaze_Mapping_Plugin, self).__init__(g_pool)
+        super().__init__(g_pool)
         self.g_pool.active_gaze_mapping_plugin = self
 
     def on_pupil_datum(self, p):
@@ -39,7 +45,7 @@ class Gaze_Mapping_Plugin(Plugin):
 class Monocular_Gaze_Mapper_Base(Gaze_Mapping_Plugin):
     """Base class to implement the map callback"""
     def __init__(self, g_pool):
-        super(Monocular_Gaze_Mapper_Base, self).__init__(g_pool)
+        super().__init__(g_pool)
         self.min_pupil_confidence = 0.0
 
     def on_pupil_datum(self, p):
@@ -55,7 +61,7 @@ class Monocular_Gaze_Mapper_Base(Gaze_Mapping_Plugin):
 class Binocular_Gaze_Mapper_Base(Gaze_Mapping_Plugin):
     """Base class to implement the map callback"""
     def __init__(self, g_pool):
-        super(Binocular_Gaze_Mapper_Base, self).__init__(g_pool)
+        super().__init__(g_pool)
 
         self.min_pupil_confidence = 0.6
         self._caches = ([],[])
@@ -99,61 +105,61 @@ class Binocular_Gaze_Mapper_Base(Gaze_Mapping_Plugin):
 
 
 
-class Dummy_Gaze_Mapper(Monocular_Gaze_Mapper_Base):
+class Dummy_Gaze_Mapper(Monocular_Gaze_Mapper_Base,Gaze_Mapping_Plugin):
     """docstring for Dummy_Gaze_Mapper"""
     def __init__(self, g_pool):
-        super(Dummy_Gaze_Mapper, self).__init__(g_pool)
+        super().__init__(g_pool)
 
     def _map_monocular(self,p):
-        return {'norm_pos':p['norm_pos'],'confidence':p['confidence'],'timestamp':p['timestamp'],'base_data':[p]}
+        return {'topic':'gaze','norm_pos':p['norm_pos'],'confidence':p['confidence'],'timestamp':p['timestamp'],'base_data':[p]}
 
     def get_init_dict(self):
         return {}
 
 
-class Monocular_Gaze_Mapper(Monocular_Gaze_Mapper_Base):
+class Monocular_Gaze_Mapper(Monocular_Gaze_Mapper_Base,Gaze_Mapping_Plugin):
     """docstring for Monocular_Gaze_Mapper"""
     def __init__(self, g_pool,params):
-        super(Monocular_Gaze_Mapper, self).__init__(g_pool)
+        super().__init__(g_pool)
         self.params = params
-        self.map_fn = make_map_function(*self.params)
+        self.map_fn = calibrate.make_map_function(*self.params)
 
     def _map_monocular(self,p):
         gaze_point = self.map_fn(p['norm_pos'])
-        return {'norm_pos':gaze_point,'confidence':p['confidence'],'timestamp':p['timestamp'],'base_data':[p]}
+        return {'topic':'gaze','norm_pos':gaze_point,'confidence':p['confidence'],'timestamp':p['timestamp'],'base_data':[p]}
 
 
     def get_init_dict(self):
         return {'params':self.params}
 
 
-class Dual_Monocular_Gaze_Mapper(Monocular_Gaze_Mapper_Base):
+class Dual_Monocular_Gaze_Mapper(Monocular_Gaze_Mapper_Base,Gaze_Mapping_Plugin):
     """A gaze mapper that maps two eyes individually"""
     def __init__(self, g_pool,params0,params1):
-        super(Dual_Monocular_Gaze_Mapper, self).__init__(g_pool)
+        super().__init__(g_pool)
         self.params0 = params0
         self.params1 = params1
-        self.map_fns = (make_map_function(*self.params0),make_map_function(*self.params1))
+        self.map_fns = (calibrate.make_map_function(*self.params0),calibrate.make_map_function(*self.params1))
 
     def _map_monocular(self,p):
         gaze_point = self.map_fns[p['id']](p['norm_pos'])
-        return {'norm_pos':gaze_point,'confidence':p['confidence'],'id':p['id'],'timestamp':p['timestamp'],'base_data':[p]}
+        return {'topic':'gaze','norm_pos':gaze_point,'confidence':p['confidence'],'id':p['id'],'timestamp':p['timestamp'],'base_data':[p]}
 
     def get_init_dict(self):
         return {'params0':self.params0,'params1':self.params1}
 
 
-class Binocular_Gaze_Mapper(Binocular_Gaze_Mapper_Base):
+class Binocular_Gaze_Mapper(Binocular_Gaze_Mapper_Base,Gaze_Mapping_Plugin):
     def __init__(self, g_pool,params,params_eye0,params_eye1):
-        super(Binocular_Gaze_Mapper, self).__init__(g_pool)
+        super().__init__(g_pool)
         self.params = params
         self.params_eye0 = params_eye0
         self.params_eye1 = params_eye1
         self.multivariate = True
-        self.map_fn = make_map_function(*self.params)
+        self.map_fn = calibrate.make_map_function(*self.params)
         self.map_fn_fallback = []
-        self.map_fn_fallback.append(make_map_function(*self.params_eye0))
-        self.map_fn_fallback.append(make_map_function(*self.params_eye1))
+        self.map_fn_fallback.append(calibrate.make_map_function(*self.params_eye0))
+        self.map_fn_fallback.append(calibrate.make_map_function(*self.params_eye1))
 
 
     def init_gui(self):
@@ -171,11 +177,11 @@ class Binocular_Gaze_Mapper(Binocular_Gaze_Mapper_Base):
             gaze_point = (gaze_point_eye0[0] + gaze_point_eye1[0])/2. , (gaze_point_eye0[1] + gaze_point_eye1[1])/2.
         confidence = (p0['confidence'] + p1['confidence'])/2.
         ts = (p0['timestamp'] + p1['timestamp'])/2.
-        return {'norm_pos':gaze_point,'confidence':confidence,'timestamp':ts,'base_data':[p0, p1]}
+        return {'topic':'gaze','norm_pos':gaze_point,'confidence':confidence,'timestamp':ts,'base_data':[p0, p1]}
 
     def _map_monocular(self,p):
         gaze_point = self.map_fn_fallback[p['id']](p['norm_pos'])
-        return {'norm_pos':gaze_point,'confidence':p['confidence'],'timestamp':p['timestamp'],'base_data':[p]}
+        return {'topic':'gaze','norm_pos':gaze_point,'confidence':p['confidence'],'timestamp':p['timestamp'],'base_data':[p]}
 
     def deinit_gui(self):
         if self.menu:
@@ -183,7 +189,7 @@ class Binocular_Gaze_Mapper(Binocular_Gaze_Mapper_Base):
             self.menu = None
 
     def cleanup(self):
-        super(Binocular_Gaze_Mapper, self).cleanup()
+        super().cleanup()
         self.deinit_gui()
 
     def get_init_dict(self):
@@ -194,9 +200,9 @@ class Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
     def __init__(self, g_pool, params, interpolParams):
         super(Glint_Gaze_Mapper, self).__init__(g_pool)
         self.params = params
-        self.map_fn = make_map_function_two_glints(*params)
+        self.map_fn = calibrate.make_map_function_two_glints(*params)
         self.interpol_params = interpolParams
-        self.interpol_map = make_map_function(*interpolParams)
+        self.interpol_map = calibrate.make_map_function(*interpolParams)
 
     def update(self,frame,events):
         """
@@ -227,7 +233,7 @@ class Binocular_Gaze_Mapper_Old(Gaze_Mapping_Plugin):
     def __init__(self, g_pool,params):
         super(Binocular_Gaze_Mapper, self).__init__(g_pool)
         self.params = params
-        self.map_fns = (make_map_function(*self.params[0:3]),make_map_function(*self.params[3:6]))
+        self.map_fns = (calibrate.make_map_function(*self.params[0:3]),calibrate.make_map_function(*self.params[3:6]))
 
     def update(self,frame,events):
         gaze_pts = []
@@ -277,8 +283,8 @@ class Binocular_Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
         super(Binocular_Glint_Gaze_Mapper, self).__init__(g_pool)
         self.params = params
         self.paramsInterpol = interpolParams
-        self.map_fns = (make_map_function_two_glints(*self.params[0:3]),make_map_function_two_glints(*self.params[3:6]))
-        self.map_fns_interpol = (make_map_function(*self.paramsInterpol[0:3]),make_map_function(*self.paramsInterpol[3:6]))
+        self.map_fns = (calibrate.make_map_function_two_glints(*self.params[0:3]),calibrate.make_map_function_two_glints(*self.params[3:6]))
+        self.map_fns_interpol = (calibrate.make_map_function(*self.paramsInterpol[0:3]),calibrate.make_map_function(*self.paramsInterpol[3:6]))
 
     def update(self,frame,events):
         gaze_pts = []
@@ -333,10 +339,10 @@ class Bilateral_Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
         self.params_eye0 = params_eye0
         self.params_eye1 = params_eye1
         self.multivariate = False
-        self.map_fn = make_map_function_two_glints(*self.params)
+        self.map_fn = calibrate.make_map_function_two_glints(*self.params)
         self.map_fn_fallback = []
-        self.map_fn_fallback.append(make_map_function_two_glints(*self.params_eye0))
-        self.map_fn_fallback.append(make_map_function_two_glints(*self.params_eye1))
+        self.map_fn_fallback.append(calibrate.make_map_function_two_glints(*self.params_eye0))
+        self.map_fn_fallback.append(calibrate.make_map_function_two_glints(*self.params_eye1))
 
     def init_gui(self):
         self.menu = ui.Growing_Menu('Binocular Gaze Mapping')
@@ -420,16 +426,16 @@ class Bilateral_Glint_Gaze_Mapper(Gaze_Mapping_Plugin):
 
 
 
-class Vector_Gaze_Mapper(Monocular_Gaze_Mapper_Base):
+class Vector_Gaze_Mapper(Monocular_Gaze_Mapper_Base,Gaze_Mapping_Plugin):
     """docstring for Vector_Gaze_Mapper"""
     def __init__(self, g_pool, eye_camera_to_world_matrix , camera_intrinsics ,cal_points_3d, cal_ref_points_3d, cal_gaze_points_3d, gaze_distance = 500 ):
-        super(Vector_Gaze_Mapper, self).__init__(g_pool)
-        self.eye_camera_to_world_matrix  =  eye_camera_to_world_matrix
+        super().__init__(g_pool)
+        self.eye_camera_to_world_matrix = np.asarray(eye_camera_to_world_matrix)
         self.rotation_matrix = self.eye_camera_to_world_matrix[:3,:3]
-        self.rotation_vector = cv2.Rodrigues( self.rotation_matrix  )[0]
-        self.translation_vector  = self.eye_camera_to_world_matrix[:3,3]
-        self.camera_matrix = camera_intrinsics['camera_matrix']
-        self.dist_coefs = camera_intrinsics['dist_coefs']
+        self.rotation_vector = cv2.Rodrigues(self.rotation_matrix  )[0]
+        self.translation_vector = self.eye_camera_to_world_matrix[:3,3]
+        self.camera_matrix = np.asarray(camera_intrinsics['camera_matrix'])
+        self.dist_coefs = np.asarray(camera_intrinsics['dist_coefs'])
         self.world_frame_size = camera_intrinsics['resolution']
         self.camera_intrinsics = camera_intrinsics
         self.cal_points_3d = cal_points_3d
@@ -440,7 +446,6 @@ class Vector_Gaze_Mapper(Monocular_Gaze_Mapper_Base):
         self.gaze_pts_debug = []
         self.sphere = {}
         self.gaze_distance = gaze_distance
-        self.visualizer.open_window()
 
 
     def toWorld(self, p):
@@ -471,12 +476,14 @@ class Vector_Gaze_Mapper(Monocular_Gaze_Mapper_Base):
         image_point, _  =  cv2.projectPoints( np.array([gaze_point]) , self.rotation_vector, self.translation_vector , self.camera_matrix , self.dist_coefs )
         image_point = image_point.reshape(-1,2)
         image_point = normalize( image_point[0], self.world_frame_size , flip_y = True)
+        image_point = _clamp_norm_point(image_point)
 
         eye_center = self.toWorld(p['sphere']['center'])
         gaze_3d = self.toWorld(gaze_point)
         normal_3d = np.dot( self.rotation_matrix, np.array( p['circle_3d']['normal'] ) )
 
-        g = {   'norm_pos':image_point,
+        g = {   'topic':'gaze',
+                'norm_pos':image_point,
                 'eye_center_3d':eye_center.tolist(),
                 'gaze_normal_3d':normal_3d.tolist(),
                 'gaze_point_3d':gaze_3d.tolist(),
@@ -501,23 +508,23 @@ class Vector_Gaze_Mapper(Monocular_Gaze_Mapper_Base):
             self.menu = None
 
     def get_init_dict(self):
-       return {'eye_camera_to_world_matrix':self.eye_camera_to_world_matrix ,'cal_points_3d':self.cal_points_3d,'cal_ref_points_3d':self.cal_ref_points_3d, 'cal_gaze_points_3d':self.cal_gaze_points_3d,  "camera_intrinsics":self.camera_intrinsics,'gaze_distance':self.gaze_distance}
+       return {'eye_camera_to_world_matrix':self.eye_camera_to_world_matrix.tolist() ,'cal_points_3d':self.cal_points_3d,'cal_ref_points_3d':self.cal_ref_points_3d, 'cal_gaze_points_3d':self.cal_gaze_points_3d,  "camera_intrinsics":self.camera_intrinsics, 'gaze_distance':self.gaze_distance}
 
     def cleanup(self):
-        super(Vector_Gaze_Mapper,self).cleanup()
+        super().cleanup()
         self.deinit_gui()
         self.visualizer.close_window()
 
 
-class Binocular_Vector_Gaze_Mapper(Binocular_Gaze_Mapper_Base):
+class Binocular_Vector_Gaze_Mapper(Binocular_Gaze_Mapper_Base,Gaze_Mapping_Plugin):
     """docstring for Vector_Gaze_Mapper"""
     def __init__(self, g_pool, eye_camera_to_world_matrix0, eye_camera_to_world_matrix1 , camera_intrinsics , cal_points_3d = [],cal_ref_points_3d = [], cal_gaze_points0_3d = [], cal_gaze_points1_3d = [] ):
-        super(Binocular_Vector_Gaze_Mapper, self).__init__(g_pool)
+        super().__init__(g_pool)
 
-        self.eye_camera_to_world_matricies  =  eye_camera_to_world_matrix0 , eye_camera_to_world_matrix1
-        self.rotation_matricies  =  eye_camera_to_world_matrix0[:3,:3],eye_camera_to_world_matrix1[:3,:3]
-        self.rotation_vectors = cv2.Rodrigues( eye_camera_to_world_matrix0[:3,:3]  )[0] , cv2.Rodrigues( eye_camera_to_world_matrix1[:3,:3]  )[0]
-        self.translation_vectors  = eye_camera_to_world_matrix0[:3,3] , eye_camera_to_world_matrix1[:3,3]
+        self.eye_camera_to_world_matricies = np.asarray(eye_camera_to_world_matrix0), np.asarray(eye_camera_to_world_matrix1)
+        self.rotation_matricies = self.eye_camera_to_world_matricies[0][:3,:3],self.eye_camera_to_world_matricies[1][:3, :3]
+        self.rotation_vectors = cv2.Rodrigues(self.eye_camera_to_world_matricies[0][:3,:3]  )[0] , cv2.Rodrigues( self.eye_camera_to_world_matricies[1][:3,:3])[0]
+        self.translation_vectors  = self.eye_camera_to_world_matricies[0][:3, 3], self.eye_camera_to_world_matricies[1][:3, 3]
 
 
         self.cal_points_3d = cal_points_3d
@@ -526,8 +533,8 @@ class Binocular_Vector_Gaze_Mapper(Binocular_Gaze_Mapper_Base):
         self.cal_gaze_points0_3d = cal_gaze_points0_3d #save for debug window
         self.cal_gaze_points1_3d = cal_gaze_points1_3d #save for debug window
 
-        self.camera_matrix = camera_intrinsics['camera_matrix']
-        self.dist_coefs = camera_intrinsics['dist_coefs']
+        self.camera_matrix = np.asarray(camera_intrinsics['camera_matrix'])
+        self.dist_coefs = np.asarray(camera_intrinsics['dist_coefs'])
         self.world_frame_size = camera_intrinsics['resolution']
         self.camera_intrinsics = camera_intrinsics
         self.visualizer = Calibration_Visualizer(g_pool,
@@ -539,7 +546,6 @@ class Binocular_Vector_Gaze_Mapper(Binocular_Gaze_Mapper_Base):
                                                 eye_camera_to_world_matrix1=  self.eye_camera_to_world_matricies[1],
                                                 cal_gaze_points1_3d =  cal_gaze_points1_3d)
         self.g_pool = g_pool
-        self.visualizer.open_window()
         self.gaze_pts_debug0 = []
         self.gaze_pts_debug1 = []
         self.intersection_points_debug = []
@@ -581,7 +587,7 @@ class Binocular_Vector_Gaze_Mapper(Binocular_Gaze_Mapper_Base):
         image_point, _  =  cv2.projectPoints( np.array([gaze_point]) , self.rotation_vectors[p_id], self.translation_vectors[p_id] , self.camera_matrix , self.dist_coefs )
         image_point = image_point.reshape(-1,2)
         image_point = normalize( image_point[0], self.world_frame_size , flip_y = True)
-
+        image_point = _clamp_norm_point(image_point)
         if p_id == 0:
             eye_center = self.eye0_to_World(p['sphere']['center'])
             gaze_3d = self.eye0_to_World(gaze_point)
@@ -591,7 +597,9 @@ class Binocular_Vector_Gaze_Mapper(Binocular_Gaze_Mapper_Base):
 
         normal_3d = np.dot( self.rotation_matricies[p_id], np.array( p['circle_3d']['normal'] ) )
 
-        g = {   'norm_pos':image_point,
+        g = {
+                'topic':'gaze',
+                'norm_pos':image_point,
                 'eye_centers_3d':{p['id']:eye_center.tolist()},
                 'gaze_normals_3d':{p['id']:normal_3d.tolist()},
                 'gaze_point_3d':gaze_3d.tolist(),
@@ -652,6 +660,7 @@ class Binocular_Vector_Gaze_Mapper(Binocular_Gaze_Mapper_Base):
             image_point, _  =  cv2.projectPoints( np.array([nearest_intersection_point]) ,  np.array([0.0,0.0,0.0]) ,  np.array([0.0,0.0,0.0]) , self.camera_matrix , self.dist_coefs )
             image_point = image_point.reshape(-1,2)
             image_point = normalize( image_point[0], self.world_frame_size , flip_y = True)
+            image_point = _clamp_norm_point(image_point)
 
 
         if self.visualizer.window:
@@ -673,7 +682,8 @@ class Binocular_Vector_Gaze_Mapper(Binocular_Gaze_Mapper_Base):
 
         confidence = min(p0['confidence'],p1['confidence'])
         ts = (p0['timestamp'] + p1['timestamp'])/2.
-        g = {   'norm_pos':image_point,
+        g = {   'topic':'gaze',
+                'norm_pos':image_point,
                 'eye_centers_3d':{0:s0_center.tolist(),1:s1_center.tolist()},
                 'gaze_normals_3d':{0:s0_normal.tolist(),1:s1_normal.tolist()},
                 'gaze_point_3d':nearest_intersection_point.tolist(),
@@ -689,7 +699,7 @@ class Binocular_Vector_Gaze_Mapper(Binocular_Gaze_Mapper_Base):
         self.intersection_points_debug = []
 
     def get_init_dict(self):
-       return {'eye_camera_to_world_matrix0':self.eye_camera_to_world_matricies[0] ,'eye_camera_to_world_matrix1':self.eye_camera_to_world_matricies[1] ,'cal_ref_points_3d':self.cal_ref_points_3d, 'cal_gaze_points0_3d':self.cal_gaze_points0_3d, 'cal_gaze_points1_3d':self.cal_gaze_points1_3d,  "camera_intrinsics":self.camera_intrinsics}
+       return {'eye_camera_to_world_matrix0':self.eye_camera_to_world_matricies[0].tolist() ,'eye_camera_to_world_matrix1':self.eye_camera_to_world_matricies[1].tolist() ,'cal_ref_points_3d':self.cal_ref_points_3d, 'cal_gaze_points0_3d':self.cal_gaze_points0_3d, 'cal_gaze_points1_3d':self.cal_gaze_points1_3d,  "camera_intrinsics":self.camera_intrinsics}
 
 
     def deinit_gui(self):
@@ -699,6 +709,6 @@ class Binocular_Vector_Gaze_Mapper(Binocular_Gaze_Mapper_Base):
 
 
     def cleanup(self):
-        super(Binocular_Vector_Gaze_Mapper, self).cleanup()
+        super().cleanup()
         self.deinit_gui()
         self.visualizer.close_window()
