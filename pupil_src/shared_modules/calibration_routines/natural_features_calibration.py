@@ -146,7 +146,7 @@ class Natural_Features_Calibration(Calibration_Plugin):
 
 
     def gl_display(self):
-        if self.detected:
+        if self.detected and self.active:
             draw_points_norm([self.pos],size=self.r,color=RGBA(0.,1.,0.,.5))
 
 
