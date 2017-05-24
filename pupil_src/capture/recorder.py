@@ -301,7 +301,7 @@ class Recorder(Plugin):
     def recent_events(self,events):
         if self.running:
             for key, data in events.items():
-                if key not in ('dt', 'frame', 'audio_packets') and key != 'timestamp_unix':
+                if key not in ('dt', 'frame', 'audio_packets', 'timestamp_unix', 'timestamp_pupil'):
                     try:
                         self.data[key] += data
                     except KeyError:
@@ -312,12 +312,15 @@ class Recorder(Plugin):
                 frame = events['frame']
                 self.writer.write_video_frame(frame)
                 self.frame_count += 1
+                self.timestamps.append(events["frame"].timestamp)
+            else:
+                self.timestamps.append(0)
 
             for glint in events['glint_positions']:
                 self.glint_pos_list += glint
+
             self.timestampsUnix.append(events['timestamp_unix'])
             # # cv2.putText(frame.img, "Frame %s"%self.frame_count,(200,200), cv2.FONT_HERSHEY_SIMPLEX,1,(255,100,100))
-
             self.button.status_text = self.get_rec_time_str()
 
     def stop(self):

@@ -498,6 +498,7 @@ def world(timebase, eyes_are_alive, ipc_pub_url, ipc_sub_url,
         #a dictionary that allows plugins to post and read events
         events = {}
         events['timestamp_unix'] = tUnix
+
         # report time between now and the last loop interation
         events['dt'] = get_dt()
 

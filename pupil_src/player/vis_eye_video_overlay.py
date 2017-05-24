@@ -18,14 +18,11 @@ from file_methods import Persistent_Dict
 from pyglui import ui
 from player_methods import transparent_image_overlay
 from plugin import Plugin
-<<<<<<< HEAD:pupil_src/player/eye_video_overlay.py
 import av
 import copy
 from time import sleep
-import thread
-=======
+import _thread
 from copy import copy
->>>>>>> upstream/master:pupil_src/player/vis_eye_video_overlay.py
 
 # helpers/utils
 from version_utils import VersionFormat
@@ -137,12 +134,9 @@ def correlate_eye_world(eye_timestamps,world_timestamps):
 
     return eye_world_frame_map
 
-<<<<<<< HEAD:pupil_src/player/eye_video_overlay.py
 
-class Eye_Video_Overlay(Plugin):
-=======
+
 class Vis_Eye_Video_Overlay(Plugin):
->>>>>>> upstream/master:pupil_src/player/vis_eye_video_overlay.py
     """docstring This plugin allows the user to overlay the eye recording on the recording of his field of vision
         Features: flip video across horiz/vert axes, click and drag around interface, scale video size from 20% to 100%,
         show only 1 or 2 or both eyes
@@ -367,7 +361,6 @@ class Vis_Eye_Video_Overlay(Plugin):
         if 1 in self.showeyes:
             self.menu.append(ui.Switch('1',self.mirror,label="Eye 2: Horiz Flip"))
             self.menu.append(ui.Switch('1',self.flip,label="Eye 2: Vert Flip"))
-<<<<<<< HEAD:pupil_src/player/eye_video_overlay.py
 
     def reset_3D_Model_eye0(self):
         self.pupil_detectors3D[0].reset_3D_Model()
@@ -476,11 +469,9 @@ class Vis_Eye_Video_Overlay(Plugin):
             self.setPupilDetectors()
             self.threads = [[],[]]
             for eye_index, ts in zip(self.showeyes, self.eye_timestamps_path):
-                self.threads[eye_index] = thread.start_new_thread(self.calculate_pupil, (eye_index, ts) )
-=======
+                self.threads[eye_index] = _thread.start_new_thread(self.calculate_pupil, (eye_index, ts) )
         self.menu.append(ui.Switch('show_ellipses', self, label="Visualize Ellipses"))
 
->>>>>>> upstream/master:pupil_src/player/vis_eye_video_overlay.py
 
     def set_showeyes(self,new_mode):
         #everytime we choose eye setting (either use eye 1, 2, or both, updates the gui menu to remove certain options from list)
@@ -587,14 +578,12 @@ class Vis_Eye_Video_Overlay(Plugin):
             if self.flip[str(eye_index)]:
                 eyeimage = np.flipud(eyeimage)
 
-<<<<<<< HEAD:pupil_src/player/eye_video_overlay.py
 
             #5. finally overlay the image
 
             x,y = int(self.pos[eye_index][0]),int(self.pos[eye_index][1])
             transparent_image_overlay((x,y),eyeimage,frame.img,self.alpha)
 
-=======
             eyeimage = cv2.cvtColor(eyeimage, cv2.COLOR_GRAY2BGR)
 
             if self.show_ellipses and events['pupil_positions']:
@@ -622,7 +611,6 @@ class Vis_Eye_Video_Overlay(Plugin):
             # 5. finally overlay the image
             x, y = int(self.pos[eye_index][0]), int(self.pos[eye_index][1])
             transparent_image_overlay((x, y), eyeimage, frame.img, self.alpha)
->>>>>>> upstream/master:pupil_src/player/vis_eye_video_overlay.py
 
     def on_click(self,pos,button,action):
         if self.move_around == 1 and action == 1:
