@@ -329,7 +329,11 @@ def eye(timebase, is_alive_flag, ipc_pub_url, ipc_sub_url, ipc_push_url,
                 for key in pupil_settings.keys():
                     print(key)
                     try:
-                        pupil_settings[key] = pupil_settings_new[key]
+                        if type(pupil_settings[key]) == dict:
+                            for sec_key in pupil_settings[key].keys():
+                                pupil_settings[key][sec_key] = pupil_settings_new[key][sec_key]
+                        else:
+                            pupil_settings[key] = pupil_settings_new[key]
                     except:
                         logger.info("no key with the name '%s' in pupil settings" %key)
         # Initialize glfw
