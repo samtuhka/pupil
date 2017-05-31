@@ -156,6 +156,7 @@ class Vis_Eye_Video_Overlay(Plugin):
         self.show_ellipses = show_ellipses
 
         self.detect_3D = 0
+        self.algorithm = 0
 
         self.gPool0 = Global_Container()
         self.gPool1 = Global_Container()
@@ -293,6 +294,7 @@ class Vis_Eye_Video_Overlay(Plugin):
         self.menu.append(ui.Button('Close',self.unset_alive))
 
         self.menu.append(ui.Switch('detect_3D',self,label="3D detection"))
+        self.menu.append(ui.Switch('algorithm',self,label="Algorithm view"))
 
 
         pupil0_menu = ui.Growing_Menu('Pupil0')
@@ -320,6 +322,7 @@ class Vis_Eye_Video_Overlay(Plugin):
         pupil1_menu.append(ui.Slider('intens_range1',self,min=0,step=1,max=60,label='Pupil intensity range'))
         pupil1_menu.append(ui.Slider('model_sensitivity1',self,min=0.0, step=0.0001, max=1.0, label='Model sensitivity'))
         pupil1_menu[-1].display_format = '%0.4f'
+        pupil1_menu.append(ui.Slider('ellipse_roundness_ratio',self,min=0.01,step=0.01,max=1.0,label='ellipse_roundness_ratio'))
         pupil1_menu.append(ui.Slider('coarse_filter_min1',self,min=10,step=1,max=500,label='coarse_filter_min'))
         pupil1_menu.append(ui.Slider('coarse_filter_max1',self,min=100,step=1,max=1000,label='coarse_filter_max'))
         pupil1_menu.append(ui.Slider('canny_treshold1',self,min=50,step=1,max=500,label='canny_treshold'))
@@ -447,7 +450,7 @@ class Vis_Eye_Video_Overlay(Plugin):
             image = self.eye_cap[eye_index].get_frame_nowait()
 
             result,roi = pupil_detector.detect(image, self.u_r, False)
-            glints = glint_detector.glint(image, eye_index, u_roi=self.u_r, pupil=result, roi=roi)
+            glints = [[0,0,0,0,0,0], [0,0,0,0,0,1]] #glint_detector.glint(image, eye_index, u_roi=self.u_r, pupil=result, roi=roi)
             result['glints'] = glints
             result['id'] = eye_index
             data['pupil_positions'].append(result)
@@ -528,9 +531,12 @@ class Vis_Eye_Video_Overlay(Plugin):
 
 
                 new_frame = self.eye_frames[eye_index]
-
-                result, roi = pupil_detector.detect(new_frame, self.u_r, "algorithm")
-                glints = glint_detector.glint(new_frame, eye_index, u_roi=self.u_r, pupil=result, roi=roi)
+                if self.algorithm == 1:
+                  view = "algorithm"
+                else:
+                  view = False
+                result, roi = pupil_detector.detect(new_frame, self.u_r, view)
+                glints = [[0,0,0,0,0,0], [0,0,0,0,0,1]] #glint_detector.glint(new_frame, eye_index, u_roi=self.u_r, pupil=result, roi=roi)
 
                 if eye_index == 0:
                     self.gPool0.pupil_queue.put(result)
@@ -584,7 +590,7 @@ class Vis_Eye_Video_Overlay(Plugin):
             x,y = int(self.pos[eye_index][0]),int(self.pos[eye_index][1])
             transparent_image_overlay((x,y),eyeimage,frame.img,self.alpha)
 
-            eyeimage = cv2.cvtColor(eyeimage, cv2.COLOR_GRAY2BGR)
+            #eyeimage = cv2.cvtColor(eyeimage, cv2.COLOR_GRAY2BGR)
 
             if self.show_ellipses and events['pupil_positions']:
                 for pd in events['pupil_positions']:
