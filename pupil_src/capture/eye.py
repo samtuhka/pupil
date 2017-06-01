@@ -111,6 +111,7 @@ def eye(timebase, is_alive_flag, ipc_pub_url, ipc_sub_url, ipc_push_url,
         import psutil
         import math
         from time import time
+        import json
 
 
         # helpers/utils
@@ -308,10 +309,14 @@ def eye(timebase, is_alive_flag, ipc_pub_url, ipc_sub_url, ipc_push_url,
 
             if not new_settings == "default":
                 try:
-                    pupil_settings_new = load_object(os.path.join(g_pool.user_dir,'pupil_settings_' + new_settings))
+                    path = os.path.join(g_pool.user_dir,'pupil_settings_' + new_settings + '.json')
+                    with open(path, 'r') as fp:
+                        json_str = fp.read()
+                        pupil_settings_new = json.loads(json_str)
                 except:
                     logger.error("Settings don't exist")
-                pupil_settings_new = convert_keys_to_string(pupil_settings_new)
+                #pupil_settings_new = convert_keys_to_string(pupil_settings_new)
+                pupil_settings_new['2D_Settings'] = dict(pupil_settings_new)
                 pupil_settings = g_pool.pupil_detector.get_settings()
                 controls = g_pool.capture.uvc_capture.controls
                 controls_dict = dict([(c.display_name,c) for c in controls])
@@ -367,7 +372,7 @@ def eye(timebase, is_alive_flag, ipc_pub_url, ipc_sub_url, ipc_push_url,
                                            header_pos='left')
         general_settings = ui.Growing_Menu('General')
 
-        general_settings.append(ui.Selector('pupil_settings',g_pool,setter=set_pupil_settings,selection=['default','indoors','outdoors_sunny', 'outdoors_cloudy'], labels=['Default', 'Indoors', 'Outdoors Sunny', 'Outdoors Cloudy'], label="Pupil settings") )
+        general_settings.append(ui.Selector('pupil_settings',g_pool,setter=set_pupil_settings,selection=['default','indoors','outdoors_sunny', 'outdoors_cloudy', 'vanilla'], labels=['Default', 'Indoors', 'Outdoors Sunny', 'Outdoors Cloudy'], label="Pupil settings") )
         general_settings.append(ui.Selector('gui_user_scale', g_pool,
                                           setter=set_scale,
                                           selection=[.8, .9, 1., 1.1, 1.2],

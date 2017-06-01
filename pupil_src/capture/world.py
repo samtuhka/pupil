@@ -86,6 +86,7 @@ def world(timebase, eyes_are_alive, ipc_pub_url, ipc_sub_url,
     from methods import normalize, denormalize, delta_t, get_system_info, timer
     from uvc import get_time_monotonic
     from time import time
+    import json
     logger.info('Application Version: {}'.format(version))
     logger.info('System Info: {}'.format(get_system_info()))
 
@@ -319,12 +320,16 @@ def world(timebase, eyes_are_alive, ipc_pub_url, ipc_sub_url,
 
         if not new_settings == "default":
             try:
-                world_settings_new = load_object(os.path.join(g_pool.user_dir,'world_settings_' + new_settings))
+                    path = os.path.join(g_pool.user_dir,'world_settings_' + new_settings + '.json')
+                    with open(path, 'r') as fp:
+                        json_str = fp.read()
+                        world_settings_new = json.loads(json_str)
+
             except:
                 logger.error("Settings don't exist")
                 return
 
-            world_settings_new = convert_keys_to_string(world_settings_new)
+            #world_settings_new = convert_keys_to_string(world_settings_new)
             controls = g_pool.capture.uvc_capture.controls
 
             controls_dict = dict([(c.display_name,c) for c in controls])
