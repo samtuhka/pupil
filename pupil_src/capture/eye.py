@@ -372,7 +372,7 @@ def eye(timebase, is_alive_flag, ipc_pub_url, ipc_sub_url, ipc_push_url,
                                            header_pos='left')
         general_settings = ui.Growing_Menu('General')
 
-        general_settings.append(ui.Selector('pupil_settings',g_pool,setter=set_pupil_settings,selection=['default','indoors','outdoors_sunny', 'outdoors_cloudy', 'vanilla'], labels=['Default', 'Indoors', 'Outdoors Sunny', 'Outdoors Cloudy'], label="Pupil settings") )
+        general_settings.append(ui.Selector('pupil_settings',g_pool,setter=set_pupil_settings,selection=['default','indoors','outdoors_sunny', 'outdoors_cloudy', 'vanilla'], labels=['Default', 'Indoors', 'Outdoors Sunny', 'Outdoors Cloudy', 'Vanilla'], label="Pupil settings") )
         general_settings.append(ui.Selector('gui_user_scale', g_pool,
                                           setter=set_scale,
                                           selection=[.8, .9, 1., 1.1, 1.2],
