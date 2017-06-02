@@ -368,13 +368,6 @@ class Recorder(Plugin):
         except:
             logger.warning("No accuracy test found.")
 
-        try:
-            copy2(os.path.join(self.g_pool.user_dir,"accuracy_test_pt_cloud_previous.npy"),os.path.join(self.rec_path,"accuracy_test_pt_cloud_previous.npy"))
-            copy2(os.path.join(self.g_pool.user_dir,"accuracy_test_ref_list_previous.npy"),os.path.join(self.rec_path,"accuracy_test_ref_list_previous.npy"))
-        except:
-            logger.warning("No previous accuracy test results.")
-
-
         camera_calibration = load_camera_calibration(self.g_pool)
         if camera_calibration is not None:
             save_object(camera_calibration, os.path.join(self.rec_path, "camera_calibration"))
