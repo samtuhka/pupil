@@ -73,7 +73,7 @@ class Natural_Features_Calibration(Calibration_Plugin):
 
 
     def start(self):
-        audio.say("Starting Calibration")
+        #audio.say("Starting Calibration")
         logger.info("Starting Calibration")
         self.active = True
         self.ref_list = []
@@ -83,7 +83,7 @@ class Natural_Features_Calibration(Calibration_Plugin):
         self.calGlint = self.g_pool.calGlint
 
     def stop(self):
-        audio.say("Stopping Calibration")
+        #audio.say("Stopping Calibration")
         logger.info("Stopping Calibration")
         self.active = False
         self.button.status_text = ''
