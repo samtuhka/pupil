@@ -336,10 +336,10 @@ class Recorder(Plugin):
         glint_list_path = os.path.join(self.rec_path, "glint_positions.npy")
         np.save(glint_list_path,self.glint_pos_list)
 
-        timestamps_path = os.path.join(self.rec_path, "world_timestamps.npy")
+        #timestamps_path = os.path.join(self.rec_path, "world_timestamps.npy")
         # ts = sanitize_timestamps(np.array(self.timestamps))
-        ts = np.array(self.timestamps)
-        np.save(timestamps_path,ts)
+        #ts = np.array(self.timestamps)
+        #np.save(timestamps_path,ts)
 
         timestampsUnix_path = os.path.join(self.rec_path, "world_timestamps_unix.npy")
         tsUnix = np.array(self.timestampsUnix)
