@@ -312,14 +312,11 @@ class Recorder(Plugin):
                 frame = events['frame']
                 self.writer.write_video_frame(frame)
                 self.frame_count += 1
-                self.timestamps.append(events["frame"].timestamp)
-            else:
-                self.timestamps.append(0)
+                self.timestampsUnix.append(events['timestamp_unix'])
 
             for glint in events['glint_positions']:
                 self.glint_pos_list += glint
 
-            self.timestampsUnix.append(events['timestamp_unix'])
             # # cv2.putText(frame.img, "Frame %s"%self.frame_count,(200,200), cv2.FONT_HERSHEY_SIMPLEX,1,(255,100,100))
             self.button.status_text = self.get_rec_time_str()
 
