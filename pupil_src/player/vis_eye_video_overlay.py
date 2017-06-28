@@ -23,6 +23,7 @@ import copy
 from time import sleep
 import _thread
 from copy import copy
+import json
 
 # helpers/utils
 from version_utils import VersionFormat
@@ -168,27 +169,21 @@ class Vis_Eye_Video_Overlay(Plugin):
         self.g_pool = g_pool
 
         #below is a fckng mess
-        self.min_size = 40
-        self.max_size = 150
-        self.intens_range = 17
+        self.pupil_size_min = 40
+        self.pupil_size_max = 150
+        self.intensity_range = 17
         self.model_sensitivity = 0.997
-
-        self.min_size1 = 40
-        self.max_size1 = 150
-        self.intens_range1 = 17
-        self.model_sensitivity1 = 0.997
         self.ellipse_roundness_ratio = 0.1
         self.coarse_filter_min = 150
         self.coarse_filter_max = 300
         self.initial_ellipse_fit_treshhold = 1.8
-        self.strong_perimeter_ratio_range_min = 0.8
-        self.strong_perimeter_ratio_range_max = 1.1
-
         self.canny_treshold = 200
         self.canny_ration = 3
-        self.canny_aperture = 5
 
-
+        self.pupil_size_min1 = 40
+        self.pupil_size_max1 = 150
+        self.intensity_range1 = 17
+        self.model_sensitivity1 = 0.997
         self.ellipse_roundness_ratio1 = 0.1
         self.coarse_filter_min1 = 150
         self.coarse_filter_max1 = 300
@@ -236,6 +231,7 @@ class Vis_Eye_Video_Overlay(Plugin):
         self.dilate1 = 0
         self.erode1 = 0
         self.recalculating = 0
+        self.pupil_settings = 'default'
 
         self.msg = ""
 
@@ -288,6 +284,25 @@ class Vis_Eye_Video_Overlay(Plugin):
         self.update_gui()
         self.g_pool.gui.append(self.menu)
 
+    def set_pupil_settings(self, new_settings):
+            self.pupil_settings = new_settings
+            if not new_settings == "default":
+                try:
+                    path = os.path.join(self.g_pool.user_dir,'pupil_settings_' + new_settings + '.json')
+                    with open(path, 'r') as fp:
+                        json_str = fp.read()
+                        pupil_settings_new = json.loads(json_str)
+                except:
+                    logger.error("Settings don't exist")
+                    
+                for key in self.__dict__:
+                    try:
+                        self.__dict__[key] = pupil_settings_new[key]
+                        self.__dict__[key + "1"] = pupil_settings_new[key]
+                        logger.info("set key with the name '%s'" %key)
+                    except:
+                        pass
+                        #logger.info("no key with the name '%s' in settings" %key)
 
     def update_gui(self):
         self.menu.elements[:] = []
@@ -295,13 +310,16 @@ class Vis_Eye_Video_Overlay(Plugin):
 
         self.menu.append(ui.Switch('detect_3D',self,label="3D detection"))
         self.menu.append(ui.Switch('algorithm',self,label="Algorithm view"))
+        self.menu.append(ui.Switch('show_ellipses', self, label="Visualize Recorded Gaze"))
+        self.menu.append(ui.Selector('pupil_settings',self,setter=self.set_pupil_settings,selection=['default','indoors','outdoors_sunny', 'outdoors_cloudy', 'vanilla'], labels=['Default', 'Indoors', 'Outdoors Sunny', 'Outdoors Cloudy', 'Vanilla'], label="Pupil settings") )
+
 
 
         pupil0_menu = ui.Growing_Menu('Pupil0')
         pupil0_menu.collapsed = True
-        pupil0_menu.append(ui.Slider('min_size',self,min=0,step=1,max=250,label='Pupil min size'))
-        pupil0_menu.append(ui.Slider('max_size' ,self,min=0,step=1,max=400,label='Pupil max size'))
-        pupil0_menu.append(ui.Slider('intens_range',self,min=0,step=1,max=60,label='Pupil intensity range'))
+        pupil0_menu.append(ui.Slider('pupil_size_min',self,min=0,step=1,max=250,label='Pupil min size'))
+        pupil0_menu.append(ui.Slider('pupil_size_max' ,self,min=0,step=1,max=400,label='Pupil max size'))
+        pupil0_menu.append(ui.Slider('intensity_range',self,min=0,step=1,max=60,label='Pupil intensity range'))
         pupil0_menu.append(ui.Slider('model_sensitivity',self,min=0.0,step=0.0001,max=1.0,label='Model sensitivity'))
         pupil0_menu[-1].display_format = '%0.4f'
         pupil0_menu.append(ui.Slider('ellipse_roundness_ratio',self,min=0.01,step=0.01,max=1.0,label='ellipse_roundness_ratio'))
@@ -317,9 +335,9 @@ class Vis_Eye_Video_Overlay(Plugin):
 
         pupil1_menu = ui.Growing_Menu('Pupil1')
         pupil1_menu.collapsed = True
-        pupil1_menu.append(ui.Slider('min_size1',self,min=0,step=1,max=250,label='Pupil min size'))
-        pupil1_menu.append(ui.Slider('max_size1' ,self,min=0,step=1,max=400,label='Pupil max size'))
-        pupil1_menu.append(ui.Slider('intens_range1',self,min=0,step=1,max=60,label='Pupil intensity range'))
+        pupil1_menu.append(ui.Slider('pupil_size_min1',self,min=0,step=1,max=250,label='Pupil min size'))
+        pupil1_menu.append(ui.Slider('pupil_size_max1' ,self,min=0,step=1,max=400,label='Pupil max size'))
+        pupil1_menu.append(ui.Slider('intensity_range1',self,min=0,step=1,max=60,label='Pupil intensity range'))
         pupil1_menu.append(ui.Slider('model_sensitivity1',self,min=0.0, step=0.0001, max=1.0, label='Model sensitivity'))
         pupil1_menu[-1].display_format = '%0.4f'
         pupil1_menu.append(ui.Slider('ellipse_roundness_ratio',self,min=0.01,step=0.01,max=1.0,label='ellipse_roundness_ratio'))
@@ -382,9 +400,9 @@ class Vis_Eye_Video_Overlay(Plugin):
     def setSettings(self, eye_index, settings, glint_settings):
 
         if eye_index == 0:
-            settings["intensity_range"] = self.intens_range
-            settings["pupil_size_min"] = self.min_size
-            settings["pupil_size_max"] = self.max_size
+            settings["intensity_range"] = self.intensity_range
+            settings["pupil_size_min"] = self.pupil_size_min
+            settings["pupil_size_max"] = self.pupil_size_max
             settings["ellipse_roundness_ratio"] = self.ellipse_roundness_ratio
             settings["coarse_filter_min"] = self.coarse_filter_min
             settings["coarse_filter_max"] = self.coarse_filter_max
@@ -402,9 +420,9 @@ class Vis_Eye_Video_Overlay(Plugin):
             glint_settings['erode'] = self.erode
 
         if eye_index == 1:
-            settings["intensity_range"] = self.intens_range1
-            settings["pupil_size_min"] = self.min_size1
-            settings["pupil_size_max"] = self.max_size1
+            settings["intensity_range"] = self.intensity_range1
+            settings["pupil_size_min"] = self.pupil_size_min1
+            settings["pupil_size_max"] = self.pupil_size_max1
             settings['model_sensitivity'] = self.model_sensitivity1
             settings["ellipse_roundness_ratio"] = self.ellipse_roundness_ratio1
             settings["coarse_filter_min"] = self.coarse_filter_min1
@@ -473,8 +491,6 @@ class Vis_Eye_Video_Overlay(Plugin):
             self.threads = [[],[]]
             for eye_index, ts in zip(self.showeyes, self.eye_timestamps_path):
                 self.threads[eye_index] = _thread.start_new_thread(self.calculate_pupil, (eye_index, ts) )
-        self.menu.append(ui.Switch('show_ellipses', self, label="Visualize Ellipses"))
-
 
     def set_showeyes(self,new_mode):
         #everytime we choose eye setting (either use eye 1, 2, or both, updates the gui menu to remove certain options from list)
@@ -552,15 +568,15 @@ class Vis_Eye_Video_Overlay(Plugin):
                 pts = cv2.ellipse2Poly( (int(result['ellipse']['center'][0]),int(result['ellipse']['center'][1])),
                                                 (int(result['ellipse']['axes'][0]/2),int(result['ellipse']['axes'][1]/2)),
                                                 int(result['ellipse']['angle']),0,360,15)
-                cv2.polylines(self.eye_frames[eye_index].img, [pts], 1, (0,0,255))
+                cv2.polylines(self.eye_frames[eye_index].img, [pts], 1, (0,255,0))
                 center = result['ellipse']['center']
                 center = [int(x) for x in center]
-                cv2.circle(self.eye_frames[eye_index].img, tuple(center), True, (0,0,255), thickness=5)
+                cv2.circle(self.eye_frames[eye_index].img, tuple(center), True, (0,255,0), thickness=15)
 
                 glints = np.array(glints)
-                if len(glints)>0 and glints[0][3]:
-                    for g in glints:
-                        cv2.circle(self.eye_frames[eye_index].img, (int(g[1]),int(g[2])), True,(255,0,0),thickness=5)
+                #if len(glints)>0 and glints[0][3]:
+                #    for g in glints:
+                #        cv2.circle(self.eye_frames[eye_index].img, (int(g[1]),int(g[2])), True,(255,0,0),thickness=5)
 
                 if result['method'] == '3d c++':
 
