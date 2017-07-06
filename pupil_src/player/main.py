@@ -142,6 +142,11 @@ class Global_Container(object):
 
 
 def session(rec_dir):
+    plugin_dir = os.path.join(user_dir, 'plugins')
+    if not os.path.isdir(plugin_dir):
+        os.mkdir(plugin_dir)
+    runtime_plugins = import_runtime_plugins(plugin_dir)
+
     system_plugins = [Log_Display, Seek_Bar, Trim_Marks]
     vis_plugins = sorted([Vis_Circle, Vis_Fixation, Vis_Polyline, Vis_Light_Points, Vis_Cross,
                           Vis_Watermark, Vis_Eye_Video_Overlay, Vis_Scan_Path], key=lambda x: x.__name__)
@@ -151,7 +156,7 @@ def session(rec_dir):
                                Raw_Data_Exporter, Batch_Exporter, Annotation_Player], key=lambda x: x.__name__)
 
     other_plugins = sorted([Log_History, Marker_Auto_Trim_Marks], key=lambda x: x.__name__)
-    user_plugins = sorted(import_runtime_plugins(os.path.join(user_dir, 'plugins')), key=lambda x: x.__name__)
+    user_plugins = sorted(runtime_plugins, key=lambda x: x.__name__)
 
     user_launchable_plugins = vis_plugins + analysis_plugins + other_plugins + user_plugins
     available_plugins = system_plugins + user_launchable_plugins
@@ -557,8 +562,8 @@ def show_no_rec_window():
 
     # load session persistent settings
     session_settings = Persistent_Dict(os.path.join(user_dir, "user_settings"))
-    if VersionFormat(session_settings.get("version", '0.0')) < get_version(version_file):
-        logger.info("Session setting are from older version of this app. I will not use those.")
+    if VersionFormat(session_settings.get("version", '0.0')) != get_version(version_file):
+        logger.info("Session setting are from a  different version of this app. I will not use those.")
         session_settings.clear()
     w, h = session_settings.get('window_size', (1280, 720))
     window_pos = session_settings.get('window_position', window_position_default)
