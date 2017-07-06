@@ -24,6 +24,8 @@ from time import sleep
 import _thread
 from copy import copy
 import json
+#import pyelse
+
 
 # helpers/utils
 from version_utils import VersionFormat
@@ -165,6 +167,7 @@ class Vis_Eye_Video_Overlay(Plugin):
         self.gPool0.pupil_queue = Queue()
         self.gPool1.pupil_queue = Queue()
 
+        self.center = [0,0]
 
         self.g_pool = g_pool
 
@@ -403,14 +406,16 @@ class Vis_Eye_Video_Overlay(Plugin):
             settings["intensity_range"] = self.intensity_range
             settings["pupil_size_min"] = self.pupil_size_min
             settings["pupil_size_max"] = self.pupil_size_max
+            settings['model_sensitivity'] = self.model_sensitivity
             settings["ellipse_roundness_ratio"] = self.ellipse_roundness_ratio
             settings["coarse_filter_min"] = self.coarse_filter_min
             settings["coarse_filter_max"] = self.coarse_filter_max
             settings["canny_treshold"] = self.canny_treshold
             settings["canny_ration"] = self.canny_ration
 
-            if self.detect_3D == 1:
-                settings['2D_Settings'] = settings
+            if self.detect_3D:
+                settings['2D_Settings'].update(settings)
+                settings['3D_Settings'].update(settings)
 
             glint_settings['glint_dist'] = self.glint_dist
             glint_settings['glint_thres'] = self.glint_thres
@@ -431,8 +436,9 @@ class Vis_Eye_Video_Overlay(Plugin):
             settings["canny_ration"] = self.canny_ration1
 
 
-            if self.detect_3D == 1:
-                settings['2D_Settings'] = settings
+            if self.detect_3D:
+                settings['2D_Settings'].update(settings)
+                settings['3D_Settings'].update(settings)
 
             glint_settings['glint_dist'] = self.glint_dist1
             glint_settings['glint_thres'] = self.glint_thres1
@@ -456,32 +462,77 @@ class Vis_Eye_Video_Overlay(Plugin):
         self.gPool0.pupil_queue = Queue()
         self.gPool1.pupil_queue = Queue()
 
+        using3D = self.detect_3D
+
+        calibTime = float("inf")
+        updating = False
+        lastCalibTime = float("inf")
+        lastCalibFrame = float("inf")
+        try:
+            fp = os.path.join(self.rec_dir,"calibTimes.npy")
+            logger.info(fp)
+            calibTimes = np.load(fp).tolist()
+            calibTime = calibTimes.pop(0)
+            logger.info(calibTimes)
+        except:
+            logger.info("No calibration times")
+            pass
+
         timestamps = np.load(ts)
         data = {'pupil_positions':[]}
         self.eye_cap[eye_index].seek_to_frame(0)
         self.u_r = UIRoi((640, 480))
 
-        for t,i in zip(timestamps, range(timestamps.size)):
-
+        i = 0
+        while True:
+            
+            if i == timestamps.size:
+                break
             if i % 1000 == 0:
                 logger.info("eye %d: %d frames processed" % (eye_index, i))
-            image = self.eye_cap[eye_index].get_frame_nowait()
-
+            t = timestamps[i]
+            image = self.eye_cap[eye_index].get_frame()
             result,roi = pupil_detector.detect(image, self.u_r, False)
             glints = [[0,0,0,0,0,0], [0,0,0,0,0,1]] #glint_detector.glint(image, eye_index, u_roi=self.u_r, pupil=result, roi=roi)
             result['glints'] = glints
             result['id'] = eye_index
+            result['timestamp'] = t
+            result['updating'] = updating
+                
             data['pupil_positions'].append(result)
 
+            center = result['ellipse']['center']
+            center = [int(x) for x in center]
+            
             if eye_index == 0:
                 self.gPool0.pupil_queue.put(result)
             else:
                 self.gPool1.pupil_queue.put(result)
 
+            if (t > calibTime and using3D):
+                pupil_detector.reset_3D_Model()
+                lastCalibTime = calibTime
+                updating = True
+                if len(calibTimes) > 0:
+                    calibTime = calibTimes.pop(0)
+                else:
+                     calibTime = float("inf")
+                lastCalibFrame = i
+                logger.info("eye %d: 3D Model Updating" % eye_index)
+            if t > (lastCalibTime + 60):
+                i = lastCalibFrame
+                self.eye_cap[eye_index].seek_to_frame(i)
+                updating = False
+                lastCalibTime = float("inf")
+                lastCalibFrame = float("inf")
+                logger.info("eye %d: returning 60 seconds to past" % eye_index)
+            else:
+                i += 1
+
         save_object(data,os.path.join(self.rec_dir,"recalculated_pupil_" + str(eye_index)))
         logger.debug("eye %d finished" % eye_index)
         self.recalculating -= 1
-        self.threads[eye_index].join()
+        #self.threads[eye_index].join()
 
     def recalculate(self):
         if self.recalculating > 0:
@@ -511,7 +562,7 @@ class Vis_Eye_Video_Overlay(Plugin):
                 # do we need to seek?
                 if requested_eye_frame_idx == self.eye_cap[eye_index].get_frame_index()+1:
                     # if we just need to seek by one frame, its faster to just read one and and throw it away.
-                                                                                                                                                                                                                                                                                                                                                                                            _ = self.eye_cap[eye_index].get_frame()
+                    _ = self.eye_cap[eye_index].get_frame()
                 if requested_eye_frame_idx != self.eye_cap[eye_index].get_frame_index():
                     # only now do I need to seek
                     self.eye_cap[eye_index].seek_to_frame(requested_eye_frame_idx)
@@ -539,8 +590,9 @@ class Vis_Eye_Video_Overlay(Plugin):
                 self.setPupilDetectors()
                 pupil_detector = self.pupil_detectors[eye_index]
                 glint_detector = self.glint_detectors[eye_index]
-
+        
                 settings = pupil_detector.get_settings()
+
                 glint_settings = glint_detector.settings()
                 self.setSettings(eye_index, settings, glint_settings)
                 glint_detector.update()
@@ -573,6 +625,14 @@ class Vis_Eye_Video_Overlay(Plugin):
                 center = [int(x) for x in center]
                 cv2.circle(self.eye_frames[eye_index].img, tuple(center), True, (0,255,0), thickness=15)
 
+                #img = 255 - np.mean(new_frame.img, axis=2)
+                #img = (img*255).astype(np.uint8)
+                #ret = pyelse.run(img, 10)
+                #x = ret.center.x
+                #y = ret.center.y
+                #cv2.circle(self.eye_frames[eye_index].img, (int(x), int(y)), True, (255,0,0), thickness=10)
+
+
                 glints = np.array(glints)
                 #if len(glints)>0 and glints[0][3]:
                 #    for g in glints:
@@ -589,46 +649,49 @@ class Vis_Eye_Video_Overlay(Plugin):
                             pass
                         else:
                             cv2.polylines(self.eye_frames[eye_index].img, [pts], 1, (255,0,0))
+
+            if self.show_ellipses and events['pupil_positions'] and self.recalculating == 0:
+                for pd in events['pupil_positions']:
+                    if pd['id'] == eye_index and pd['timestamp'] == self.eye_frames[eye_index].timestamp:
+                        break
+
+                if pd['method'] == '3d c++':
+
+                    eye_ball = pd['projected_sphere']
+                    try:
+                        pts = cv2.ellipse2Poly( (int(eye_ball['center'][0]),int(eye_ball['center'][1])),
+                                            (int(eye_ball['axes'][0]/2),int(eye_ball['axes'][1]/2)),
+                                            int(eye_ball['angle']),0,360,8)
+                    except ValueError as e:
+                        pass
+                    else:
+                        cv2.polylines(self.eye_frames[eye_index].img, [pts], 1, (0,255,0))
+
+                el = pd['ellipse']
+                conf = int(pd.get('model_confidence', pd.get('confidence', 0.1)) * 255)
+                center = list(map(lambda val: int(val), el['center']))
+                el['axes'] = tuple(map(lambda val: int(val/2), el['axes']))
+                el['angle'] = int(el['angle'])
+                el_points = cv2.ellipse2Poly(tuple(center), el['axes'], el['angle'], 0, 360, 1)
+
+                cv2.polylines(self.eye_frames[eye_index].img, [np.asarray(el_points)], True, (0, 0, 255, conf), thickness=math.ceil(2))
+                cv2.circle(self.eye_frames[eye_index].img, tuple(center), int(5*self.eye_scale_factor), (0, 0, 255, conf), thickness=-1)
+
             #3. keep in image bounds, do this even when not dragging because the image video_sizes could change.
             self.pos[eye_index][1] = min(frame.img.shape[0]-self.video_size[1],max(self.pos[eye_index][1],0)) #frame.img.shape[0] is height, frame.img.shape[1] is width of screen
             self.pos[eye_index][0] = min(frame.img.shape[1]-self.video_size[0],max(self.pos[eye_index][0],0))
 
+            #4. flipping images, converting to greyscale
+            #eye_gray = cv2.cvtColor(self.eye_frames[eye_index].img,cv2.COLOR_BGR2GRAY) #auto gray scaling
             eyeimage = cv2.resize(self.eye_frames[eye_index].img,(0,0),fx=self.eye_scale_factor, fy=self.eye_scale_factor)
-
             if self.mirror[str(eye_index)]:
                 eyeimage = np.fliplr(eyeimage)
             if self.flip[str(eye_index)]:
                 eyeimage = np.flipud(eyeimage)
 
 
-            #5. finally overlay the image
-
-            x,y = int(self.pos[eye_index][0]),int(self.pos[eye_index][1])
-            transparent_image_overlay((x,y),eyeimage,frame.img,self.alpha)
-
             #eyeimage = cv2.cvtColor(eyeimage, cv2.COLOR_GRAY2BGR)
 
-            if self.show_ellipses and events['pupil_positions']:
-                for pd in events['pupil_positions']:
-                    if pd['id'] == eye_index and pd['timestamp'] == self.eye_frames[eye_index].timestamp:
-                        break
-
-                el = pd['ellipse']
-                conf = int(pd.get('model_confidence', pd.get('confidence', 0.1)) * 255)
-                center = list(map(lambda val: int(self.eye_scale_factor*val), el['center']))
-                el['axes'] = tuple(map(lambda val: int(self.eye_scale_factor*val/2), el['axes']))
-                el['angle'] = int(el['angle'])
-                el_points = cv2.ellipse2Poly(tuple(center), el['axes'], el['angle'], 0, 360, 1)
-
-                if self.mirror[str(eye_index)]:
-                    el_points = [(self.video_size[0] - x, y) for x, y in el_points]
-                    center[0] = self.video_size[0] - center[0]
-                if self.flip[str(eye_index)]:
-                    el_points = [(x, self.video_size[1] - y) for x, y in el_points]
-                    center[1] = self.video_size[1] - center[1]
-
-                cv2.polylines(eyeimage, [np.asarray(el_points)], True, (0, 0, 255, conf), thickness=math.ceil(2*self.eye_scale_factor))
-                cv2.circle(eyeimage, tuple(center), int(5*self.eye_scale_factor), (0, 0, 255, conf), thickness=-1)
 
             # 5. finally overlay the image
             x, y = int(self.pos[eye_index][0]), int(self.pos[eye_index][1])

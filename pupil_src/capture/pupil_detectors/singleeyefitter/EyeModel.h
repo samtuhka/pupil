@@ -67,7 +67,7 @@ class EyeModel {
         typedef singleeyefitter::Sphere<double> Sphere;
     public:
 
-        EyeModel( int modelId, double timestamp,  double focalLength, Vector3 cameraCenter, int initialUncheckedPupils = 3, double binResolution = 0.05  );
+        EyeModel( int modelId, double timestamp,  double focalLength, Vector3 cameraCenter, int initialUncheckedPupils = 1000, double binResolution = 0.05  );
         EyeModel(const EyeModel&) = delete;
         //EyeModel(EyeModel&&); // we need a explicit 1/Move constructor because of the mutex
         ~EyeModel();
