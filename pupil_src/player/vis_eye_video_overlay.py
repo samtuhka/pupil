@@ -40,6 +40,8 @@ from file_methods import Persistent_Dict,save_object
 
 from pupil_detectors import Detector_2D, Detector_3D, Glint_Detector
 from ui_roi import UIRoi
+import ui_roi
+
 
 #logging
 import logging
@@ -168,6 +170,7 @@ class Vis_Eye_Video_Overlay(Plugin):
         self.gPool1.pupil_queue = Queue()
 
         self.center = [0,0]
+        self.mouse_img = [[0,0],[0,0]]
 
         self.g_pool = g_pool
 
@@ -194,6 +197,8 @@ class Vis_Eye_Video_Overlay(Plugin):
         self.canny_treshold1 = 200
         self.canny_ration1 = 3
 
+        self.u_r = [UIRoi((480, 640)), UIRoi((480, 640))]
+        self.urActive = False
 
         self.rec_dir = g_pool.rec_dir
 
@@ -241,8 +246,6 @@ class Vis_Eye_Video_Overlay(Plugin):
         glint_detector0 = Glint_Detector(g_pool, self.glint_settings)
         glint_detector1 = Glint_Detector(g_pool, self.glint_settings)
         self.glint_detectors = [glint_detector0, glint_detector1]
-
-        self.u_r = UIRoi((640, 480))
 
         # load eye videos and eye timestamps
         if VersionFormat(self.g_pool.meta_info['Capture Software Version'][1:]) < VersionFormat('0.4'):
@@ -449,7 +452,6 @@ class Vis_Eye_Video_Overlay(Plugin):
 
 
     def calculate_pupil(self,eye_index, ts):
-        self.u_r = UIRoi((640, 480))
         self.recalculating += 1
         pupil_detector = self.pupil_detectors[eye_index]
         glint_detector = self.glint_detectors[eye_index]
@@ -475,13 +477,14 @@ class Vis_Eye_Video_Overlay(Plugin):
             calibTime = calibTimes.pop(0)
             logger.info(calibTimes)
         except:
+            calibTimes = [0]
+            calibTime = calibTimes.pop(0)
             logger.info("No calibration times")
             pass
 
         timestamps = np.load(ts)
         data = {'pupil_positions':[]}
         self.eye_cap[eye_index].seek_to_frame(0)
-        self.u_r = UIRoi((640, 480))
 
         i = 0
         while True:
@@ -492,7 +495,7 @@ class Vis_Eye_Video_Overlay(Plugin):
                 logger.info("eye %d: %d frames processed" % (eye_index, i))
             t = timestamps[i]
             image = self.eye_cap[eye_index].get_frame()
-            result,roi = pupil_detector.detect(image, self.u_r, False)
+            result,roi = pupil_detector.detect(image, self.u_r[eye_index], False)
             glints = [[0,0,0,0,0,0], [0,0,0,0,0,1]] #glint_detector.glint(image, eye_index, u_roi=self.u_r, pupil=result, roi=roi)
             result['glints'] = glints
             result['id'] = eye_index
@@ -558,7 +561,7 @@ class Vis_Eye_Video_Overlay(Plugin):
             requested_eye_frame_idx = self.eye_world_frame_map[eye_index][frame.index]
 
             #1. do we need a new frame?
-            if requested_eye_frame_idx != self.eye_frames[eye_index].index and self.recalculating == 0:
+            if (requested_eye_frame_idx != self.eye_frames[eye_index].index or self.urActive) and self.recalculating == 0:
                 # do we need to seek?
                 if requested_eye_frame_idx == self.eye_cap[eye_index].get_frame_index()+1:
                     # if we just need to seek by one frame, its faster to just read one and and throw it away.
@@ -575,6 +578,8 @@ class Vis_Eye_Video_Overlay(Plugin):
                 #our old frame is still valid because we are doing upsampling
                 pass
 
+
+
             #2. dragging image
             if self.drag_offset[eye_index] is not None:
                 pos = glfwGetCursorPos(glfwGetCurrentContext())
@@ -585,8 +590,16 @@ class Vis_Eye_Video_Overlay(Plugin):
             else:
                 self.video_size = [round(self.eye_frames[eye_index].width*self.eye_scale_factor), round(self.eye_frames[eye_index].height*self.eye_scale_factor)]
 
+            pos = glfwGetCursorPos(glfwGetCurrentContext())
+            pos = normalize(pos,glfwGetWindowSize(glfwGetCurrentContext()))
+            pos = denormalize(pos,(frame.img.shape[1],frame.img.shape[0]) )
+            pos = (int(pos[0] - self.pos[eye_index][0]), int(pos[1] - self.pos[eye_index][1]))
+            self.mouse_img[eye_index] = pos
+            
+            if self.urActive == eye_index + 1:
+                self.u_r[eye_index].move_vertex(self.u_r[eye_index].active_pt_idx,pos)
+
             if self.recalculating == 0:
-                self.u_r = UIRoi((640, 480))
                 self.setPupilDetectors()
                 pupil_detector = self.pupil_detectors[eye_index]
                 glint_detector = self.glint_detectors[eye_index]
@@ -603,7 +616,7 @@ class Vis_Eye_Video_Overlay(Plugin):
                   view = "algorithm"
                 else:
                   view = False
-                result, roi = pupil_detector.detect(new_frame, self.u_r, view)
+                result, roi = pupil_detector.detect(new_frame, self.u_r[eye_index], view)
                 glints = [[0,0,0,0,0,0], [0,0,0,0,0,1]] #glint_detector.glint(new_frame, eye_index, u_roi=self.u_r, pupil=result, roi=roi)
 
                 if eye_index == 0:
@@ -677,6 +690,15 @@ class Vis_Eye_Video_Overlay(Plugin):
                 cv2.polylines(self.eye_frames[eye_index].img, [np.asarray(el_points)], True, (0, 0, 255, conf), thickness=math.ceil(2))
                 cv2.circle(self.eye_frames[eye_index].img, tuple(center), int(5*self.eye_scale_factor), (0, 0, 255, conf), thickness=-1)
 
+
+            rect = np.asarray(self.u_r[eye_index].rect)
+            #rect[:,[0, 1]] = rect[:,[1, 0]]
+            cv2.polylines(self.eye_frames[eye_index].img, [rect],True, (0, 255, 255), thickness=math.ceil(2))
+            for corner in rect:
+                cv2.circle(self.eye_frames[eye_index].img, (int(corner[0]), int(corner[1])), int(5*self.eye_scale_factor), (0, 255, 255), thickness=-1)
+
+
+            
             #3. keep in image bounds, do this even when not dragging because the image video_sizes could change.
             self.pos[eye_index][1] = min(frame.img.shape[0]-self.video_size[1],max(self.pos[eye_index][1],0)) #frame.img.shape[0] is height, frame.img.shape[1] is width of screen
             self.pos[eye_index][0] = min(frame.img.shape[1]-self.video_size[0],max(self.pos[eye_index][0],0))
@@ -698,6 +720,15 @@ class Vis_Eye_Video_Overlay(Plugin):
             transparent_image_overlay((x, y), eyeimage, frame.img, self.alpha)
 
     def on_click(self,pos,button,action):
+        if action == 1:
+            if self.urActive == False:
+                for eye_index in self.showeyes:
+                    if self.pos[eye_index][0] < pos[0] < self.pos[eye_index][0]+self.video_size[0] and self.pos[eye_index][1] < pos[1] < self.pos[eye_index][1] + self.video_size[1]:
+                        img_pos = self.mouse_img[eye_index]
+                        if self.u_r[eye_index].mouse_over_edit_pt(img_pos, self.u_r[eye_index].handle_size + 20,self.u_r[eye_index].handle_size + 20):
+                            self.urActive = eye_index + 1
+            else:
+                self.urActive = False
         if self.move_around == 1 and action == 1:
             for eye_index in self.showeyes:
                 if self.pos[eye_index][0] < pos[0] < self.pos[eye_index][0]+self.video_size[0] and self.pos[eye_index][1] < pos[1] < self.pos[eye_index][1] + self.video_size[1]:
