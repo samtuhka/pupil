@@ -210,15 +210,15 @@ class Vis_Eye_Video_Overlay(Plugin):
 
 
         if uroi0 != False:
-            self.u_r[0].lY = uroi0[0]
-            self.u_r[0].uY = uroi0[1]
-            self.u_r[0].lX = uroi0[2]
-            self.u_r[0].uX = uroi0[3]
+            self.u_r[0].lX = uroi0[0]
+            self.u_r[0].lY = uroi0[1]
+            self.u_r[0].uX = uroi0[2]
+            self.u_r[0].uY = uroi0[3]
         if uroi1  != False:
-            self.u_r[1].lY = uroi1[0]
-            self.u_r[1].uY = uroi1[1]
-            self.u_r[1].lX = uroi1[2]
-            self.u_r[1].uX = uroi1[3]
+            self.u_r[1].lX = uroi1[0]
+            self.u_r[1].lY = uroi1[1]
+            self.u_r[1].uX = uroi1[2]
+            self.u_r[1].uY = uroi1[3]
             
         self.urActive = False
 
