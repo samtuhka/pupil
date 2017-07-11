@@ -163,6 +163,11 @@ class Vis_Eye_Video_Overlay(Plugin):
         self.detect_3D = 0
         self.algorithm = 0
 
+        self.persistent_settings_0 = Persistent_Dict(os.path.join(g_pool.user_dir,'user_settings_eye0') )
+        self.persistent_settings_1 = Persistent_Dict(os.path.join(g_pool.user_dir,'user_settings_eye1') )
+        self.current_settings_0 = {}
+        self.current_settings_1 = {}
+
         self.gPool0 = Global_Container()
         self.gPool1 = Global_Container()
 
@@ -281,8 +286,23 @@ class Vis_Eye_Video_Overlay(Plugin):
             self.alive = False
             return
 
+        self.setKeys(self.persistent_settings_0, 0)
+        self.setKeys(self.persistent_settings_1, 1)
+
     def unset_alive(self):
         self.alive = False
+
+    def setKeys(self, pupil_settings_new, eye = 0):
+        for key in self.__dict__:
+            try:
+                if eye == 0:
+                    self.__dict__[key] = pupil_settings_new[key]
+                else:
+                    self.__dict__[key + "1"] = pupil_settings_new[key]
+                logger.info("set key with the name '%s'" %key)
+            except:
+                pass
+                #logger.info("no key with the name '%s' in settings" %key)
 
     def init_gui(self):
         # initialize the menu
@@ -300,15 +320,10 @@ class Vis_Eye_Video_Overlay(Plugin):
                         pupil_settings_new = json.loads(json_str)
                 except:
                     logger.error("Settings don't exist")
-                    
-                for key in self.__dict__:
-                    try:
-                        self.__dict__[key] = pupil_settings_new[key]
-                        self.__dict__[key + "1"] = pupil_settings_new[key]
-                        logger.info("set key with the name '%s'" %key)
-                    except:
-                        pass
-                        #logger.info("no key with the name '%s' in settings" %key)
+
+                setKeys(pupil_settings_new, 0)
+                setKeys(pupil_settings_new, 1)
+
 
     def update_gui(self):
         self.menu.elements[:] = []
@@ -427,6 +442,8 @@ class Vis_Eye_Video_Overlay(Plugin):
             glint_settings['dilate'] = self.dilate
             glint_settings['erode'] = self.erode
 
+            self.current_settings_0.update(settings)
+
         if eye_index == 1:
             settings["intensity_range"] = self.intensity_range1
             settings["pupil_size_min"] = self.pupil_size_min1
@@ -449,6 +466,8 @@ class Vis_Eye_Video_Overlay(Plugin):
             glint_settings['glint_max'] = self.glint_max1
             glint_settings['dilate'] = self.dilate1
             glint_settings['erode'] = self.erode1
+
+            self.current_settings_1.update(settings)
 
 
     def calculate_pupil(self,eye_index, ts):
@@ -745,4 +764,8 @@ class Vis_Eye_Video_Overlay(Plugin):
         This happens either voluntarily or forced.
         if you have a GUI or glfw window destroy it here.
         """
+        self.persistent_settings_0.update(self.current_settings_1)
+        self.persistent_settings_1.update(self.current_settings_0)
+        self.persistent_settings_0.close()
+        self.persistent_settings_1.close()
         self.deinit_gui()
