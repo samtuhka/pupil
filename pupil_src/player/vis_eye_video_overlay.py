@@ -165,6 +165,8 @@ class Vis_Eye_Video_Overlay(Plugin):
 
         self.persistent_settings_0 = Persistent_Dict(os.path.join(g_pool.user_dir,'user_settings_eye0') )
         self.persistent_settings_1 = Persistent_Dict(os.path.join(g_pool.user_dir,'user_settings_eye1') )
+        self.persistent_settings_roi = Persistent_Dict(os.path.join(g_pool.user_dir,'user_settings_roi') )
+
         self.current_settings_0 = {}
         self.current_settings_1 = {}
 
@@ -202,7 +204,22 @@ class Vis_Eye_Video_Overlay(Plugin):
         self.canny_treshold1 = 200
         self.canny_ration1 = 3
 
+        uroi0 = self.persistent_settings_roi.get('roi0', False)
+        uroi1 = self.persistent_settings_roi.get('roi1', False)
         self.u_r = [UIRoi((480, 640)), UIRoi((480, 640))]
+
+
+        if uroi0 != False:
+            self.u_r[0].lY = uroi0[0]
+            self.u_r[0].uY = uroi0[1]
+            self.u_r[0].lX = uroi0[2]
+            self.u_r[0].uX = uroi0[3]
+        if uroi1  != False:
+            self.u_r[1].lY = uroi1[0]
+            self.u_r[1].uY = uroi1[1]
+            self.u_r[1].lX = uroi1[2]
+            self.u_r[1].uX = uroi1[3]
+            
         self.urActive = False
 
         self.rec_dir = g_pool.rec_dir
@@ -293,7 +310,8 @@ class Vis_Eye_Video_Overlay(Plugin):
         self.alive = False
 
     def setKeys(self, pupil_settings_new, eye = 0):
-        for key in self.__dict__:
+        keys = list(self.__dict__)
+        for key in keys:
             try:
                 if eye == 0:
                     self.__dict__[key] = pupil_settings_new[key]
@@ -361,7 +379,7 @@ class Vis_Eye_Video_Overlay(Plugin):
         pupil1_menu.append(ui.Slider('intensity_range1',self,min=0,step=1,max=60,label='Pupil intensity range'))
         pupil1_menu.append(ui.Slider('model_sensitivity1',self,min=0.0, step=0.0001, max=1.0, label='Model sensitivity'))
         pupil1_menu[-1].display_format = '%0.4f'
-        pupil1_menu.append(ui.Slider('ellipse_roundness_ratio',self,min=0.01,step=0.01,max=1.0,label='ellipse_roundness_ratio'))
+        pupil1_menu.append(ui.Slider('ellipse_roundness_ratio1',self,min=0.01,step=0.01,max=1.0,label='ellipse_roundness_ratio'))
         pupil1_menu.append(ui.Slider('coarse_filter_min1',self,min=10,step=1,max=500,label='coarse_filter_min'))
         pupil1_menu.append(ui.Slider('coarse_filter_max1',self,min=100,step=1,max=1000,label='coarse_filter_max'))
         pupil1_menu.append(ui.Slider('canny_treshold1',self,min=50,step=1,max=500,label='canny_treshold'))
@@ -550,7 +568,9 @@ class Vis_Eye_Video_Overlay(Plugin):
                 logger.info("eye %d: returning 60 seconds to past" % eye_index)
             else:
                 i += 1
-
+        settings = pupil_detector.get_settings()
+        settings['roi'] = self.u_r[eye_index].get()
+        data['pupil_detector_settings'] = pupil_detector.get_settings()
         save_object(data,os.path.join(self.rec_dir,"recalculated_pupil_" + str(eye_index)))
         logger.debug("eye %d finished" % eye_index)
         self.recalculating -= 1
@@ -766,6 +786,9 @@ class Vis_Eye_Video_Overlay(Plugin):
         """
         self.persistent_settings_0.update(self.current_settings_1)
         self.persistent_settings_1.update(self.current_settings_0)
+        self.persistent_settings_roi['roi0'] = self.u_r[0].get()
+        self.persistent_settings_roi['roi1'] = self.u_r[1].get()
         self.persistent_settings_0.close()
         self.persistent_settings_1.close()
+        self.persistent_settings_roi.close()
         self.deinit_gui()
