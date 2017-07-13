@@ -450,8 +450,11 @@ class Vis_Eye_Video_Overlay(Plugin):
             settings["canny_ration"] = self.canny_ration
 
             if self.detect_3D:
-                settings['2D_Settings'].update(settings)
-                settings['3D_Settings'].update(settings)
+                settings_copy = dict(settings)
+                del settings_copy['2D_Settings']
+                del settings_copy['3D_Settings']
+                settings['2D_Settings'].update(settings_copy)
+                settings['3D_Settings'].update(settings_copy)
 
             glint_settings['glint_dist'] = self.glint_dist
             glint_settings['glint_thres'] = self.glint_thres
@@ -475,8 +478,11 @@ class Vis_Eye_Video_Overlay(Plugin):
 
 
             if self.detect_3D:
-                settings['2D_Settings'].update(settings)
-                settings['3D_Settings'].update(settings)
+                settings_copy = dict(settings)
+                del settings_copy['2D_Settings']
+                del settings_copy['3D_Settings']
+                settings['2D_Settings'].update(settings_copy)
+                settings['3D_Settings'].update(settings_copy)
 
             glint_settings['glint_dist'] = self.glint_dist1
             glint_settings['glint_thres'] = self.glint_thres1
@@ -577,7 +583,7 @@ class Vis_Eye_Video_Overlay(Plugin):
                 i += 1
         settings = pupil_detector.get_settings()
         settings['roi'] = self.u_r[eye_index].get()
-        data['pupil_detector_settings'] = pupil_detector.get_settings()
+        data['pupil_detector_settings'] = settings
         save_object(data,os.path.join(self.rec_dir,"recalculated_pupil_" + str(eye_index)))
         logger.debug("eye %d finished" % eye_index)
         self.recalculating -= 1
