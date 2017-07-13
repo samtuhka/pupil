@@ -502,6 +502,7 @@ class Vis_Eye_Video_Overlay(Plugin):
         self.gPool1.pupil_queue = Queue()
 
         using3D = self.detect_3D
+        model_birth_timestamp = -1
 
         calibTime = float("inf")
         updating = False
@@ -549,16 +550,22 @@ class Vis_Eye_Video_Overlay(Plugin):
             else:
                 self.gPool1.pupil_queue.put(result)
 
-            if (t > calibTime and using3D):
+            if using3D and model_birth_timestamp != result['model_birth_timestamp']:
+                model_birth_timestamp = result['model_birth_timestamp']
+                lastCalibTime = result['model_birth_timestamp']
+                if not updating:
+                    updating = True
+                    lastCalibFrame = i
+                logger.info("eye %d: 3D Model update at frame %d" % (eye_index, i))
+
+            if using3D and (t > calibTime or (result['projected_sphere']['axes'][0] < 400 and t > lastCalibTime + 20)):
                 pupil_detector.reset_3D_Model()
-                lastCalibTime = calibTime
-                updating = True
                 if len(calibTimes) > 0:
                     calibTime = calibTimes.pop(0)
                 else:
                      calibTime = float("inf")
-                lastCalibFrame = i
-                logger.info("eye %d: 3D Model Updating" % eye_index)
+                logger.info("eye %d: 3D Model manual reset at frame %d" % (eye_index, i))
+
             if t > (lastCalibTime + 60):
                 i = lastCalibFrame
                 self.eye_cap[eye_index].seek_to_frame(i)
@@ -708,7 +715,6 @@ class Vis_Eye_Video_Overlay(Plugin):
                         break
 
                 if pd['method'] == '3d c++':
-
                     eye_ball = pd['projected_sphere']
                     try:
                         pts = cv2.ellipse2Poly( (int(eye_ball['center'][0]),int(eye_ball['center'][1])),
