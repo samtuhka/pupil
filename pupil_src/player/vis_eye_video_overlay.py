@@ -352,8 +352,6 @@ class Vis_Eye_Video_Overlay(Plugin):
         self.menu.append(ui.Switch('show_ellipses', self, label="Visualize Recorded Gaze"))
         self.menu.append(ui.Selector('pupil_settings',self,setter=self.set_pupil_settings,selection=['default','indoors','outdoors_sunny', 'outdoors_cloudy', 'vanilla'], labels=['Default', 'Indoors', 'Outdoors Sunny', 'Outdoors Cloudy', 'Vanilla'], label="Pupil settings") )
 
-
-
         pupil0_menu = ui.Growing_Menu('Pupil0')
         pupil0_menu.collapsed = True
         pupil0_menu.append(ui.Slider('pupil_size_min',self,min=0,step=1,max=250,label='Pupil min size'))
@@ -512,6 +510,8 @@ class Vis_Eye_Video_Overlay(Plugin):
 
         calibTime = float("inf")
         updating = False
+        inPast = False
+        present = 0
         lastCalibTime = float("inf")
         lastCalibFrame = float("inf")
         try:
@@ -564,7 +564,10 @@ class Vis_Eye_Video_Overlay(Plugin):
                     lastCalibFrame = i
                 logger.info("eye %d: 3D Model update at frame %d" % (eye_index, i))
 
-            if using3D and (t > calibTime or (result['projected_sphere']['axes'][0] < 400 and t > lastCalibTime + 20)):
+            if inPast and t >= present:
+                inPast = False
+
+            if using3D and (t > calibTime or (result['projected_sphere']['axes'][0] < 400 and t > lastCalibTime + 20)) and not inPast:
                 pupil_detector.reset_3D_Model()
                 if len(calibTimes) > 0:
                     calibTime = calibTimes.pop(0)
@@ -572,13 +575,15 @@ class Vis_Eye_Video_Overlay(Plugin):
                      calibTime = float("inf")
                 logger.info("eye %d: 3D Model manual reset at frame %d" % (eye_index, i))
 
-            if t > (lastCalibTime + 60):
+            if t > (lastCalibTime + 30):
                 i = lastCalibFrame
                 self.eye_cap[eye_index].seek_to_frame(i)
                 updating = False
+                inPast = True
+                present = t
                 lastCalibTime = float("inf")
                 lastCalibFrame = float("inf")
-                logger.info("eye %d: returning 60 seconds to past" % eye_index)
+                logger.info("eye %d: returning to the past" % eye_index)
             else:
                 i += 1
         settings = pupil_detector.get_settings()
