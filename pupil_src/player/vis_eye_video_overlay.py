@@ -339,8 +339,8 @@ class Vis_Eye_Video_Overlay(Plugin):
                 except:
                     logger.error("Settings don't exist")
 
-                setKeys(pupil_settings_new, 0)
-                setKeys(pupil_settings_new, 1)
+                self.setKeys(pupil_settings_new, 0)
+                self.setKeys(pupil_settings_new, 1)
 
 
     def update_gui(self):
