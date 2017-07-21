@@ -567,7 +567,7 @@ class Vis_Eye_Video_Overlay(Plugin):
             if inPast and t >= present:
                 inPast = False
 
-            if using3D and (t > calibTime or (result['projected_sphere']['axes'][0] < 400 and t > lastCalibTime + 20)) and not inPast:
+            if using3D and (t > calibTime or (result['projected_sphere']['axes'][0] < 300 and t > lastCalibTime + 20)) and not inPast:
                 pupil_detector.reset_3D_Model()
                 if len(calibTimes) > 0:
                     calibTime = calibTimes.pop(0)
@@ -575,7 +575,7 @@ class Vis_Eye_Video_Overlay(Plugin):
                      calibTime = float("inf")
                 logger.info("eye %d: 3D Model manual reset at frame %d" % (eye_index, i))
 
-            if t > (lastCalibTime + 30):
+            if t > (lastCalibTime + 30) or (i == timestamps.size -1 and updating == True):
                 i = lastCalibFrame
                 self.eye_cap[eye_index].seek_to_frame(i)
                 updating = False
