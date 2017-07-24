@@ -817,8 +817,8 @@ class Vis_Eye_Video_Overlay(Plugin):
         This happens either voluntarily or forced.
         if you have a GUI or glfw window destroy it here.
         """
-        self.persistent_settings_0.update(self.current_settings_1)
-        self.persistent_settings_1.update(self.current_settings_0)
+        self.persistent_settings_0.update(self.current_settings_0)
+        self.persistent_settings_1.update(self.current_settings_1)
         self.persistent_settings_roi['roi0'] = self.u_r[0].get()
         self.persistent_settings_roi['roi1'] = self.u_r[1].get()
         self.persistent_settings_0.close()
