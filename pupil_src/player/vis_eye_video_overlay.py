@@ -342,6 +342,21 @@ class Vis_Eye_Video_Overlay(Plugin):
                 self.setKeys(pupil_settings_new, 0)
                 self.setKeys(pupil_settings_new, 1)
 
+    def save_settings(self):
+        settings_eye0 = Persistent_Dict(os.path.join(self.rec_dir,'user_settings_eye0') )
+        settings_eye1 = Persistent_Dict(os.path.join(self.rec_dir,'user_settings_eye1') )
+        settings_roi = Persistent_Dict(os.path.join(self.rec_dir,'user_settings_roi') )
+        settings_eye0.update(self.current_settings_0)
+        settings_eye1.update(self.current_settings_1)
+        settings_roi['roi0'] = self.u_r[0].get()
+        settings_roi['roi1'] = self.u_r[1].get()
+
+        settings_eye0.close()
+        settings_eye1.close()
+        settings_roi.close()
+
+        
+
 
     def update_gui(self):
         self.menu.elements[:] = []
@@ -349,6 +364,7 @@ class Vis_Eye_Video_Overlay(Plugin):
 
         self.menu.append(ui.Switch('detect_3D',self,label="3D detection"))
         self.menu.append(ui.Switch('algorithm',self,label="Algorithm view"))
+        self.menu.append(ui.Button("Save settings", self.save_settings))
         self.menu.append(ui.Switch('show_ellipses', self, label="Visualize Recorded Gaze"))
         self.menu.append(ui.Selector('pupil_settings',self,setter=self.set_pupil_settings,selection=['default','indoors','outdoors_sunny', 'outdoors_cloudy', 'vanilla'], labels=['Default', 'Indoors', 'Outdoors Sunny', 'Outdoors Cloudy', 'Vanilla'], label="Pupil settings") )
 
