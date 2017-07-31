@@ -228,6 +228,7 @@ class Vis_Eye_Video_Overlay(Plugin):
         self.eye_frames = []
         self.eye_world_frame_map = []
         self.eye_cap = []
+        self.eye_cap_3D = []
         self.mirror = mirror #do we horiz flip first eye
         self.flip = flip #do we vert flip first eye
         self.pos = [list(pos[0]),list(pos[1])] #positions of 2 eyes
@@ -282,6 +283,7 @@ class Vis_Eye_Video_Overlay(Plugin):
         for video,ts in zip(eye_video_path,self.eye_timestamps_path):
             try:
                 self.eye_cap.append(File_Source(self.g_pool,source_path=glob(video)[0],timestamps=np.load(ts)))
+                self.eye_cap_3D.append(File_Source(self.g_pool,source_path=glob(video)[0],timestamps=np.load(ts)))
             except(IndexError,FileCaptureError):
                 pass
             else:
@@ -531,7 +533,7 @@ class Vis_Eye_Video_Overlay(Plugin):
         lastCalibTime = float("inf")
         lastCalibFrame = float("inf")
         try:
-            fp = os.path.join(self.rec_dir,"calibTimes.npy")
+            fp = os.path.join(self.rec_dir,"/../calibTimes.npy")
             logger.info(fp)
             calibTimes = np.load(fp).tolist()
             calibTime = calibTimes.pop(0)
@@ -544,17 +546,22 @@ class Vis_Eye_Video_Overlay(Plugin):
 
         timestamps = np.load(ts)
         data = {'pupil_positions':[]}
-        self.eye_cap[eye_index].seek_to_frame(0)
+        
+        if not using3D:
+            eye_cap = self.eye_cap[eye_index]
+        else:
+            eye_cap = self.eye_cap_3D[eye_index]
+            
+        eye_cap.seek_to_frame(0)
 
         i = 0
         while True:
-            
             if i == timestamps.size:
                 break
             if i % 1000 == 0:
-                logger.info("eye %d: %d frames processed" % (eye_index, i))
+                logger.info("eye %d: %d frames processed, 3D: %s" % (eye_index, i, bool(using3D)))
             t = timestamps[i]
-            image = self.eye_cap[eye_index].get_frame()
+            image = eye_cap.get_frame()
             result,roi = pupil_detector.detect(image, self.u_r[eye_index], False)
             glints = [[0,0,0,0,0,0], [0,0,0,0,0,1]] #glint_detector.glint(image, eye_index, u_roi=self.u_r, pupil=result, roi=roi)
             result['glints'] = glints
@@ -593,7 +600,7 @@ class Vis_Eye_Video_Overlay(Plugin):
 
             if t > (lastCalibTime + 30) or (i == timestamps.size -1 and updating == True):
                 i = lastCalibFrame
-                self.eye_cap[eye_index].seek_to_frame(i)
+                eye_cap.seek_to_frame(i)
                 updating = False
                 inPast = True
                 present = t
@@ -605,11 +612,14 @@ class Vis_Eye_Video_Overlay(Plugin):
         settings = pupil_detector.get_settings()
         settings['roi'] = self.u_r[eye_index].get()
         data['pupil_detector_settings'] = settings
-        save_object(data,os.path.join(self.rec_dir,"recalculated_pupil_" + str(eye_index)))
-        logger.debug("eye %d finished" % eye_index)
+        if using3D:
+            save_object(data,os.path.join(self.rec_dir,"recalculated_pupil_3D_" + str(eye_index)))
+        else:
+            save_object(data,os.path.join(self.rec_dir,"recalculated_pupil_" + str(eye_index)))
+        logger.info("eye %d finished" % eye_index)
         self.recalculating -= 1
         #self.threads[eye_index].join()
-
+        
     def recalculate(self):
         if self.recalculating > 0:
              logger.warning("Already recalculating")
