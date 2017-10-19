@@ -586,18 +586,18 @@ def eye(timebase, is_alive_flag, ipc_pub_url, ipc_sub_url, ipc_push_url,
                 result['unix_ts'] = tUnix
 
                 #glint detection
-                glints = [[0,0,0,0,0,0], [0,0,0,0,0,1]] #glint_detector.glint(frame, eye_id, u_roi=g_pool.u_r, pupil=result, roi=roi)
-                result['glints'] = glints
+                #glints = [[0,0,0,0,0,0], [0,0,0,0,0,1]] #glint_detector.glint(frame, eye_id, u_roi=g_pool.u_r, pupil=result, roi=roi)
+                #result['glints'] = glints
 
-                g_pool.glints.put(glints)
+                #g_pool.glints.put(glints)
 
 
                 #save glint-pupil vector results
-                if glints[0][3]:
-                    glint_pupil_vector = {'timestamp': glints[0][0], 'x': result['norm_pos'][0]-glints[0][3], 'y': result['norm_pos'][1]-glints[0][4], 'pupil_confidence': result['confidence'], 'glint_found': True, 'id': eye_id, 'x2': result['norm_pos'][0]-glints[1][3], 'y2': result['norm_pos'][1]-glints[1][4]}
-                else:
-                     glint_pupil_vector = {'timestamp': glints[0][0], 'x': result['norm_pos'][0]-glints[0][3], 'y': result['norm_pos'][1]-glints[0][4], 'pupil_confidence': result['confidence'], 'glint_found': False, 'id': eye_id, 'x2': result['norm_pos'][0]-glints[1][3], 'y2': result['norm_pos'][1]-glints[1][4]}
-                g_pool.glint_pupil_vectors.put(glint_pupil_vector)
+                #if glints[0][3]:
+                #    glint_pupil_vector = {'timestamp': glints[0][0], 'x': result['norm_pos'][0]-glints[0][3], 'y': result['norm_pos'][1]-glints[0][4], 'pupil_confidence': result['confidence'], 'glint_found': True, 'id': eye_id, 'x2': result['norm_pos'][0]-glints[1][3], 'y2': result['norm_pos'][1]-glints[1][4]}
+                #else:
+                #     glint_pupil_vector = {'timestamp': glints[0][0], 'x': result['norm_pos'][0]-glints[0][3], 'y': result['norm_pos'][1]-glints[0][4], 'pupil_confidence': result['confidence'], 'glint_found': False, 'id': eye_id, 'x2': result['norm_pos'][0]-glints[1][3], 'y2': result['norm_pos'][1]-glints[1][4]}
+                #g_pool.glint_pupil_vectors.put(glint_pupil_vector)
 
                 # stream the result
                 pupil_socket.send('pupil.%s'%eye_id,result)
@@ -624,13 +624,13 @@ def eye(timebase, is_alive_flag, ipc_pub_url, ipc_sub_url, ipc_push_url,
                     make_coord_system_norm_based(g_pool.flip)
                     g_pool.image_tex.draw()
 
-                    if frame:
-                        glints = np.array(result['glints'])
-                        if len(glints)>0 and glints[0][3]:
-                            if glints[1][3]:
-                                cygl_draw_points(glints[:,1:3], size=20,color=cygl_rgba(0.,0.,1.,.5),sharpness=1.)
-                            elif result['confidence'] > 0.75:
-                                cygl_draw_points(glints[:,1:3], size=20,color=cygl_rgba(0.,0.,1.,.5),sharpness=1.)
+                    #if frame:
+                    #    glints = np.array(result['glints'])
+                    #    if len(glints)>0 and glints[0][3]:
+                    #        if glints[1][3]:
+                    #            cygl_draw_points(glints[:,1:3], size=20,color=cygl_rgba(0.,0.,1.,.5),sharpness=1.)
+                    #        elif result['confidence'] > 0.75:
+                    #            cygl_draw_points(glints[:,1:3], size=20,color=cygl_rgba(0.,0.,1.,.5),sharpness=1.)
 
                     f_width, f_height = g_pool.capture.frame_size
                     make_coord_system_pixel_based((f_height, f_width, 3), g_pool.flip)
